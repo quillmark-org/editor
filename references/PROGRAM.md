@@ -340,3 +340,4 @@ markdown and config, we give you an editor."
 - Lexical: [lexical.dev](https://lexical.dev/), [lexical.dev/docs/packages/lexical-markdown](https://lexical.dev/docs/packages/lexical-markdown).
 - ChatGPT Apps SDK: [developers.openai.com/apps-sdk](https://developers.openai.com/apps-sdk).
 - MCP Apps standard: [blog.modelcontextprotocol.io/posts/2026-01-26-mcp-apps](https://blog.modelcontextprotocol.io/posts/2026-01-26-mcp-apps/).
+- The original VisualEditor source we want to replace has been included in this workspace in `references/tonguetoquill-web/src/lib/components/Editor/VisualEditor.svelte`

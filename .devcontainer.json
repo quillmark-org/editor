@@ -1,17 +1,28 @@
 {
-	"name": "tonguetoquill-web container",
+	"name": "tonguetoquill-web",
 	"image": "mcr.microsoft.com/devcontainers/javascript-node:24-bookworm",
 	"features": {
 		"ghcr.io/devcontainers/features/common-utils:2": {
 			"username": "node",
-			"installZsh": false
+			"installZsh": true
 		},
-		"ghcr.io/anthropics/devcontainer-features/claude-code:1": {}
+		"ghcr.io/anthropics/devcontainer-features/claude-code:1": {},
+		"ghcr.io/devcontainers/features/github-cli:1": {}
 	},
+	"overrideFeatureInstallOrder": [
+		"ghcr.io/devcontainers/features/common-utils",
+		"ghcr.io/anthropics/devcontainer-features/claude-code",
+		"ghcr.io/devcontainers/features/github-cli"
+	],
 	"mounts": ["source=claude-code-config-${devcontainerId},target=/home/node/.claude,type=volume"],
 	"containerEnv": {
 		"CLAUDE_CONFIG_DIR": "/home/node/.claude"
 	},
-	"remoteUser": "node",
-	"postCreateCommand": "sudo chown -R node:node /home/node/.claude"
+	"postCreateCommand": [
+		"sudo tee /etc/apt/sources.list.d/debian.sources >/dev/null <<'EOF'\nTypes: deb\nURIs: http://deb.debian.org/debian\nSuites: bookworm bookworm-updates\nComponents: main contrib non-free non-free-firmware\nSigned-By: /usr/share/keyrings/debian-archive-keyring.gpg\n\nTypes: deb\nURIs: http://security.debian.org/debian-security\nSuites: bookworm-security\nComponents: main contrib non-free non-free-firmware\nSigned-By: /usr/share/keyrings/debian-archive-keyring.gpg\nEOF\nsudo truncate -s0 /etc/apt/sources.list",
+		"sudo apt-get update",
+		"sudo DEBIAN_FRONTEND=noninteractive apt-get install -y nikto",
+		"sudo chown -R node:node /home/node/.claude"
+	],
+	"remoteUser": "node"
 }
