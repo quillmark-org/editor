@@ -2,7 +2,7 @@
 	import { onMount } from 'svelte';
 	import { DocumentEditor } from '$lib/index.js';
 	import type { QuillmarkBindings } from '$lib/types.js';
-	import { createBindings } from './bindings.js';
+	import { createBindings } from './bindings.svelte.js';
 
 	const SAMPLE = `---
 QUILL: daf4392
