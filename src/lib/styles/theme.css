@@ -1,0 +1,172 @@
+@import './utilities.css';
+
+/**
+ * @quillmark/editor — default theme tokens.
+ *
+ * All editor components read from these CSS custom properties. Override any
+ * of them at any cascade level (a wrapper element, :root, or via a media
+ * query) to retheme the editor.
+ *
+ * Dark mode: add the `qm-dark` class to a wrapper element (or :root). The
+ * package does not toggle this for you — the consumer's theme system owns it.
+ */
+
+:where(.qm-editor),
+:root {
+	/* Surfaces */
+	--qm-background: #ffffff;
+	--qm-foreground: #18181b;
+	--qm-surface: #ffffff;
+	--qm-surface-elevated: #fafafa;
+	--qm-muted: #f4f4f5;
+	--qm-muted-foreground: #71717a;
+
+	/* Interactive */
+	--qm-primary: #18181b;
+	--qm-primary-foreground: #ffffff;
+	--qm-secondary: #f4f4f5;
+	--qm-secondary-foreground: #18181b;
+	--qm-accent: #f4f4f5;
+	--qm-accent-foreground: #18181b;
+
+	/* Border / focus */
+	--qm-border: #e4e4e7;
+	--qm-border-hover: #d4d4d8;
+	--qm-input: #e4e4e7;
+	--qm-ring: #a1a1aa;
+
+	/* Selection / brand accent (selection backgrounds, focus rings) */
+	--qm-brand: #4f46e5;
+	--qm-brand-foreground: #ffffff;
+
+	/* Semantic */
+	--qm-error: #dc2626;
+	--qm-error-foreground: #991b1b;
+	--qm-error-background: #fef2f2;
+	--qm-error-border: #fecaca;
+
+	--qm-warning: #d97706;
+	--qm-warning-foreground: #92400e;
+	--qm-warning-background: #fffbeb;
+	--qm-warning-border: #fde68a;
+
+	--qm-success: #16a34a;
+	--qm-success-foreground: #166534;
+	--qm-success-background: #f0fdf4;
+	--qm-success-border: #bbf7d0;
+
+	--qm-info: #2563eb;
+	--qm-info-foreground: #1e40af;
+	--qm-info-background: #eff6ff;
+	--qm-info-border: #bfdbfe;
+
+	--qm-destructive: #dc2626;
+	--qm-destructive-foreground: #ffffff;
+	--qm-destructive-muted: rgba(220, 38, 38, 0.12);
+	--qm-destructive-hover: #b91c1c;
+
+	/* Syntax highlighting (markdown editor) */
+	--qm-syntax-keyword: #4f46e5;
+	--qm-syntax-key: #4f46e5;
+	--qm-syntax-comment: #71717a;
+	--qm-syntax-metadata-bg: rgba(79, 70, 229, 0.04);
+	--qm-syntax-fill-tag: #dc2626;
+	--qm-syntax-fill-value-bg: rgba(220, 38, 38, 0.05);
+
+	/* Mail-merge placeholder */
+	--qm-placeholder-bg: rgba(79, 70, 229, 0.08);
+	--qm-placeholder-bg-active: rgba(79, 70, 229, 0.16);
+	--qm-placeholder-border: rgba(79, 70, 229, 0.3);
+	--qm-placeholder-delimiter: #4f46e5;
+
+	/* Overlays / divider accents */
+	--qm-overlay: rgba(11, 11, 15, 0.45);
+	--qm-divider-accent: rgba(113, 113, 122, 0.4);
+	--qm-pulse-glow: rgba(79, 70, 229, 0.4);
+
+	/* Geometry */
+	--qm-radius: 8px;
+	--qm-radius-sm: 4px;
+	--qm-radius-md: 6px;
+	--qm-radius-lg: 12px;
+	--qm-radius-xl: 16px;
+
+	/* Typography */
+	--qm-font-sans:
+		ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+		'Helvetica Neue', Arial, sans-serif;
+	--qm-font-mono:
+		ui-monospace, 'SF Mono', Menlo, Consolas, 'DejaVu Sans Mono', monospace;
+	--qm-font-serif: ui-serif, Georgia, Cambria, 'Times New Roman', Times, serif;
+
+	/* Z-index layers */
+	--qm-z-base: 1;
+	--qm-z-toolbar: 10;
+	--qm-z-popover: 50;
+	--qm-z-dialog: 100;
+	--qm-z-overlay: 1000;
+}
+
+:where(.qm-dark),
+:where(.qm-dark) :where(.qm-editor),
+:where(.qm-editor.qm-dark) {
+	--qm-background: #0a0a0a;
+	--qm-foreground: #fafafa;
+	--qm-surface: #18181b;
+	--qm-surface-elevated: #27272a;
+	--qm-muted: #27272a;
+	--qm-muted-foreground: #a1a1aa;
+
+	--qm-primary: #fafafa;
+	--qm-primary-foreground: #18181b;
+	--qm-secondary: #27272a;
+	--qm-secondary-foreground: #fafafa;
+	--qm-accent: #27272a;
+	--qm-accent-foreground: #fafafa;
+
+	--qm-border: #27272a;
+	--qm-border-hover: #3f3f46;
+	--qm-input: #27272a;
+	--qm-ring: #71717a;
+
+	--qm-error-background: rgba(220, 38, 38, 0.12);
+	--qm-error-border: rgba(220, 38, 38, 0.3);
+	--qm-warning-background: rgba(217, 119, 6, 0.12);
+	--qm-warning-border: rgba(217, 119, 6, 0.3);
+	--qm-success-background: rgba(22, 163, 74, 0.12);
+	--qm-success-border: rgba(22, 163, 74, 0.3);
+	--qm-info-background: rgba(37, 99, 235, 0.12);
+	--qm-info-border: rgba(37, 99, 235, 0.3);
+
+	--qm-syntax-keyword: #818cf8;
+	--qm-syntax-key: #a5f3a1;
+	--qm-syntax-comment: #71717a;
+	--qm-syntax-metadata-bg: rgba(255, 255, 255, 0.03);
+	--qm-syntax-fill-tag: #f87171;
+	--qm-syntax-fill-value-bg: rgba(248, 113, 113, 0.05);
+
+	--qm-placeholder-bg: rgba(129, 140, 248, 0.1);
+	--qm-placeholder-bg-active: rgba(129, 140, 248, 0.2);
+	--qm-placeholder-border: rgba(129, 140, 248, 0.4);
+	--qm-placeholder-delimiter: #a5b4fc;
+
+	--qm-overlay: rgba(0, 0, 0, 0.7);
+	--qm-divider-accent: rgba(161, 161, 170, 0.3);
+	--qm-pulse-glow: rgba(129, 140, 248, 0.4);
+}
+
+/* Root container — wrap editor instances in this class to scope all tokens. */
+.qm-editor {
+	color: var(--qm-foreground);
+	background: var(--qm-background);
+	font-family: var(--qm-font-sans);
+	font-size: 14px;
+	line-height: 1.5;
+	box-sizing: border-box;
+}
+
+.qm-editor *,
+.qm-editor *::before,
+.qm-editor *::after {
+	box-sizing: border-box;
+}
