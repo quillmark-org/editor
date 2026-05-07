@@ -5,25 +5,32 @@
 	import { createBindings } from './bindings.svelte.js';
 
 	const SAMPLE = `---
-QUILL: daf4392
-TITLE: Sample document
-DATE: 2026-05-07
+QUILL: usaf_memo@0.2.0
+letterhead_title: DEPARTMENT OF THE AIR FORCE
+letterhead_caption:
+  - HEADQUARTERS YOUR UNIT NAME
+date: 2026-05-07
+memo_for:
+  - ORG/SYMBOL
+memo_from:
+  - ORG/SYMBOL
+  - Organization Name
+  - 123 Street Ave
+  - City ST 12345-6789
+subject: Subject of the Memorandum
+signature_block:
+  - FIRST M. LAST, Rank, USAF
+  - Duty Title
 ---
 
-# Hello, QuillMark
+The \`usaf_memo\` Quill package takes care of all 33-337 formatting details. Focus on the content.
 
-Edit this markdown on the left and watch the preview render on the right.
+**Numbering** Top-level paragraphs like this one are automatically numbered. NEVER manually number your paragraphs.
 
-The editor supports both **rich text** (visual) and **advanced** (raw markdown) modes — toggle with the switch above.
+- Use bullets for hierarchical paragraph nesting. These are automatically numbered or lettered as well.
+  - Up to five levels of paragraphs are supported
 
-## Features
-
-- Round-trip markdown ↔ ProseMirror
-- Live preview via injected wasm engine
-- Theme via \`--qm-*\` CSS variables
-- Multi-card document model
-
-> All your content. None of your branding.
+Do not include a complimentary close (e.g. "Respectfully,") in official memorandums.
 `;
 
 	let bindings = $state<QuillmarkBindings | null>(null);
