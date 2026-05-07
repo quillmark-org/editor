@@ -143,3 +143,6 @@ dist
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
+
+# Generated quills build output (produced by scripts/package-quills.js)
+/static/quills/

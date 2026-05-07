@@ -5,7 +5,9 @@
   "license": "MIT",
   "type": "module",
   "scripts": {
+    "predev": "node scripts/package-quills.js",
     "dev": "vite dev",
+    "prebuild": "node scripts/package-quills.js",
     "build": "vite build",
     "preview": "vite preview",
     "package": "svelte-kit sync && svelte-package && publint",
@@ -62,6 +64,7 @@
     "zod": "^4.1.12"
   },
   "devDependencies": {
+    "@airmark/quiver": "^0.15.0",
     "@quillmark/quiver": "^0.7.0",
     "@quillmark/wasm": "0.75.0",
     "@sveltejs/adapter-static": "^3.0.6",
