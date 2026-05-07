@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<script>
+			// Initialize sidebar state from localStorage to prevent flash of expanded sidebar
+			try {
+				const expanded = localStorage.getItem('sidebar-expanded');
+				// Default to expanded (true) if not set, or if explicitly true
+				// Only add collapsed class if explicitly set to 'false'
+				if (expanded === 'false') {
+					document.documentElement.classList.add('sidebar-collapsed');
+				} else if (expanded === null && window.innerWidth < 768) {
+					// Also collapse on mobile if no preference saved
+					document.documentElement.classList.add('sidebar-collapsed');
+				}
+			} catch (e) {
+				// Ignore localStorage errors
+			}
+
+			// Initialize theme from localStorage to prevent light-mode flash.
+			// Default to dark mode when no preference has been saved yet.
+			try {
+				const darkMode = localStorage.getItem('dark-mode');
+				if (darkMode === null || darkMode === 'true') {
+					document.documentElement.classList.add('dark');
+				} else {
+					document.documentElement.classList.remove('dark');
+				}
+			} catch (e) {
+				// If storage is unavailable, fall back to dark mode default
+				document.documentElement.classList.add('dark');
+			}
+
+			// Recover once from stale hashed chunks after a fresh deployment.
+			// Vite emits "vite:preloadError" when a dynamic chunk (old hash) no longer exists.
+			const preloadReloadFlag = 'ttq:reloaded-for-preload-error';
+			window.addEventListener('vite:preloadError', (event) => {
+				event.preventDefault();
+				try {
+					if (sessionStorage.getItem(preloadReloadFlag) === '1') return;
+					sessionStorage.setItem(preloadReloadFlag, '1');
+				} catch (e) {
+					// Ignore storage errors and still attempt reload
+				}
+				window.location.reload();
+			});
+		</script>
+		%sveltekit.head%
+	</head>
+
+	<body data-sveltekit-preload-data="hover">
+		<div style="display: contents">%sveltekit.body%</div>
+	</body>
+</html>

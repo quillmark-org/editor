@@ -1,0 +1,28 @@
+- Nikto v2.1.5
+---------------------------------------------------------------------------
++ Target IP:          127.0.0.1
++ Target Hostname:    localhost
++ Target Port:        4173
++ Start Time:         2026-04-21 21:01:48 (GMT0)
+---------------------------------------------------------------------------
++ Server: No banner retrieved
++ Server leaks inodes via ETags, header found with file /, fields: 0xuyufqi 
++ The anti-clickjacking X-Frame-Options header is not present.
++ Uncommon header 'access-control-allow-origin' found, with contents: *
++ Uncommon header 'x-sveltekit-page' found, with contents: true
++ Uncommon header 'link' found, with contents: <./_app/immutable/assets/base-dialog.DO-Rjdw_.css>; rel="preload"; as="style"; nopush, <./_app/immutable/assets/0.SsLkiP4h.css>; rel="preload"; as="style"; nopush, <./_app/immutable/assets/Preview.3KQdWCjj.css>; rel="preload"; as="style"; nopush, <./_app/immutable/assets/BrandTitle.CBuzWAWJ.css>; rel="preload"; as="style"; nopush, <./_app/immutable/assets/3.BU1QUoDb.css>; rel="preload"; as="style"; nopush, <./_app/immutable/entry/start.DU6EGkku.js>; rel="modulepreload"; nopush, <./_app/immutable/chunks/BxHcwJe3.js>; rel="modulepreload"; nopush, <./_app/immutable/chunks/CzC4vI8T.js>; rel="modulepreload"; nopush, <./_app/immutable/chunks/CmF92Cia.js>; rel="modulepreload"; nopush, <./_app/immutable/entry/app.DJPlzBtk.js>; rel="modulepreload"; nopush, <./_app/immutable/chunks/PPVm8Dsz.js>; rel="modulepreload"; nopush, <./_app/immutable/chunks/-GKQ71y4.js>; rel="modulepreload"; nopush, <./_app/immutable/chunks/DeCBGTIm.js>; rel="modulepreload"; nopush, <./_app/immutable/chunks/BL3FYOGd.js>; rel="modulepreload"; nopush, <./_app/immutable/chunks/CP9XvNYV.js>; rel="modulepreload"; nopush, <./_app/immutable/nodes/0.fF4qs-XM.js>; rel="modulepreload"; nopush, <./_app/immutable/chunks/DKKJjCLk.js>; rel="modulepreload"; nopush, <./_app/immutable/chunks/B8RMI1ew.js>; rel="modulepreload"; nopush, <./_app/immutable/chunks/CZfKMuyc.js>; rel="modulepreload"; nopush, <./_app/immutable/chunks/BrCRH9hl.js>; rel="modulepreload"; nopush, <./_app/immutable/chunks/DZq0rV-p.js>; rel="modulepreload"; nopush, <./_app/immutable/chunks/Bhf91uGV.js>; rel="modulepreload"; nopush, <./_app/immutable/chunks/C2k_7Yvh.js>; rel="modulepreload"; nopush, <./_app/immutable/chunks/D73XRk4H.js>; rel="modulepreload"; nopush, <./_app/immutable/nodes/3.DG3f03yQ.js>; rel="modulepreload"; nopush, <./_app/immutable/chunks/DqpteTvf.js>; rel="modulepreload"; nopush, <./_app/immutable/chunks/B7CL3x1G.js>; rel="modulepreload"; nopush
++ Cookie auth-972e5595.callback-url created without the httponly flag
++ No CGI Directories found (use '-C all' to force check all possible dirs)
++ "robots.txt" retrieved but it does not contain any 'disallow' entries (which is odd).
++ Uncommon header 'content-security-policy' found, with contents: default-src 'none'
++ Uncommon header 'x-content-type-options' found, with contents: nosniff
++ Uncommon header 'access-control-allow-methods' found, with contents: GET,HEAD,PUT,PATCH,POST,DELETE
++ Allowed HTTP Methods: GET, HEAD, OPTIONS 
++ /WEB-INF/web.xml: JRUN default file found.
++ OSVDB-17664: /_mem_bin/remind.asp: Page will give the password reminder for any user requested (username must be known).
++ Uncommon header 'x-sveltekit-normalize' found, with contents: 1
++ OSVDB-4231: /l39TO.xml: Coccoon from Apache-XML project reveals file system path in error messages.
++ 6544 items checked: 0 error(s) and 15 item(s) reported on remote host
++ End Time:           2026-04-21 21:02:16 (GMT0) (28 seconds)
+---------------------------------------------------------------------------
++ 1 host(s) tested

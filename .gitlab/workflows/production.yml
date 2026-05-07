@@ -1,0 +1,179 @@
+# Production — only semver release tags created by GitHub Actions after merging a release PR.
+# Flow: GitHub Actions "Prepare release" dispatch → PR release/v* → merge → release.yml tags vX.Y.Z on main.
+# GitLab must receive that tag (mirror with tags, or push tags to the GitLab remote).
+# Build fan-out: production-release + ISSM Approval both start after build.
+# Deploy waits for both release completion and ISSM approval.
+
+.production_rules:
+  variables:
+    HARBOR_REGISTRY: 'registry.omni.af.mil'
+    HARBOR_PROJECT: 'tonguetoquill'
+    HARBOR_UI_BASE_URL: 'https://registry.omni.af.mil/harbor'
+    WEB_IMAGE_NAME: 'ttq-web'
+    DB_IMAGE_NAME: 'ttq-db'
+  rules:
+    # Annotated tags from release.yml: vMAJOR.MINOR.PATCH (no prerelease)
+    - if: $CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+[a-z]?$/
+
+production-build:
+  extends: .production_rules
+  stage: build
+  tags: [Airmark, IL2, Rocky, Proxmox]
+  variables:
+    DOCKER_BUILDKIT: '1'
+    COMPOSE_DOCKER_CLI_BUILD: '1'
+  script:
+    - set -euo pipefail
+    - export WEB_IMAGE_REPO="${HARBOR_REGISTRY}/${HARBOR_PROJECT}/${WEB_IMAGE_NAME}"
+    - export DB_IMAGE_REPO="${HARBOR_REGISTRY}/${HARBOR_PROJECT}/${DB_IMAGE_NAME}"
+    # Prime the local layer cache from the previous release so BuildKit reuses unchanged layers.
+    - docker pull "${WEB_IMAGE_REPO}:latest" || true
+    # ttq-db has no customization over chainguard/postgres:latest — pull and retag instead of rebuilding.
+    - docker pull cgr.dev/chainguard/postgres:latest
+    - docker tag cgr.dev/chainguard/postgres:latest "${DB_IMAGE_REPO}:${CI_COMMIT_TAG}"
+    - docker tag cgr.dev/chainguard/postgres:latest "${DB_IMAGE_REPO}:latest"
+    - docker compose -f deployment/dod/docker-compose.yml build app
+    - docker tag "${WEB_IMAGE_REPO}:latest" "${WEB_IMAGE_REPO}:${CI_COMMIT_TAG}"
+    - docker push "${WEB_IMAGE_REPO}:${CI_COMMIT_TAG}"
+    - docker push "${DB_IMAGE_REPO}:${CI_COMMIT_TAG}"
+    - docker push "${WEB_IMAGE_REPO}:latest"
+    - docker push "${DB_IMAGE_REPO}:latest"
+    # Capture content-addressable digests *after* push so the deploy job can
+    # pull by digest. This bypasses any caching proxy or HA-Harbor replica that
+    # might serve a stale tag→manifest mapping at deploy time.
+    - |
+      WEB_DIGEST=$(docker inspect --format '{{range .RepoDigests}}{{println .}}{{end}}' "${WEB_IMAGE_REPO}:${CI_COMMIT_TAG}" | awk -F@ -v repo="${WEB_IMAGE_REPO}" '$1==repo {print $2; exit}')
+      DB_DIGEST=$(docker inspect --format '{{range .RepoDigests}}{{println .}}{{end}}' "${DB_IMAGE_REPO}:${CI_COMMIT_TAG}" | awk -F@ -v repo="${DB_IMAGE_REPO}" '$1==repo {print $2; exit}')
+      if [ -z "$WEB_DIGEST" ] || [ -z "$DB_DIGEST" ]; then
+        echo "ERROR: failed to capture image digests from local store after push." >&2
+        exit 1
+      fi
+      printf 'WEB_DIGEST=%s\nDB_DIGEST=%s\n' "$WEB_DIGEST" "$DB_DIGEST" > image-refs.env
+      cat image-refs.env
+  artifacts:
+    reports:
+      dotenv: image-refs.env
+
+'ISSM Approval':
+  extends: .production_rules
+  stage: deploy
+  # Runs as soon as production-build completes so approval can happen in parallel with production-release.
+  needs: [production-build]
+  when: manual
+  tags: [Airmark, IL2, Rocky, Proxmox]
+  script:
+    - set -euo pipefail
+    - echo "ISSM approval placeholder — attach a GitLab environment here when ready."
+    - echo "ISSM approval recorded at $(date -u +%Y-%m-%dT%H:%M:%SZ) for ${CI_COMMIT_TAG}" > issm_approval.txt
+    - cat issm_approval.txt
+  artifacts:
+    paths:
+      - issm_approval.txt
+    expire_in: 7 days
+
+production-deploy:
+  extends: .production_rules
+  stage: deploy
+  # Pull dotenv (WEB_DIGEST/DB_DIGEST) from the build job; release must finish too.
+  needs:
+    - job: production-build
+      artifacts: true
+    - production-release
+  when: manual
+  tags: [Airmark, IL2, Rocky, Proxmox]
+  # Hard backstop — if anything wedges (pull, healthcheck, compose), the job
+  # fails cleanly at 30m instead of sitting in "running" for the runner default.
+  timeout: 30m
+  environment:
+    name: production
+  variables:
+    DC: 'docker compose -f deployment/dod/docker-compose.yml'
+  before_script:
+    # Fail fast on missing prerequisites — never silently skip on a deploy job.
+    - |
+      if [ -z "${OMNI_HARBOR_USER:-}" ] || [ -z "${OMNI_HARBOR_PASSWORD:-}" ]; then
+        echo "ERROR: Harbor credentials missing; refusing to deploy." >&2
+        exit 1
+      fi
+      if [ -z "${WEB_DIGEST:-}" ] || [ -z "${DB_DIGEST:-}" ]; then
+        echo "ERROR: image digests missing from build artifact; refusing to deploy." >&2
+        exit 1
+      fi
+      if [ -z "${ORIGIN:-}" ]; then
+        echo "ERROR: ORIGIN is not set; refusing to deploy." >&2
+        exit 1
+      fi
+    - docker logout registry.omni.af.mil || true
+    - printf '%s' "$OMNI_HARBOR_PASSWORD" | docker login -u "$OMNI_HARBOR_USER" --password-stdin registry.omni.af.mil
+  script:
+    - set -euo pipefail
+    - export WEB_IMAGE="${HARBOR_REGISTRY}/${HARBOR_PROJECT}/${WEB_IMAGE_NAME}@${WEB_DIGEST}"
+    - export DB_IMAGE="${HARBOR_REGISTRY}/${HARBOR_PROJECT}/${DB_IMAGE_NAME}@${DB_DIGEST}"
+    - echo "Deploying ${CI_COMMIT_TAG}"
+    - 'echo "  web: ${WEB_IMAGE}"'
+    - 'echo "  db:  ${DB_IMAGE}"'
+    # Single-attempt pull with a 5-minute hard deadline. Skip if the image is
+    # already local (build runner == deploy runner — common case). No retries:
+    # a failure here means re-clicking the deploy job after fixing the cause.
+    - docker image inspect "$WEB_IMAGE" >/dev/null 2>&1 || timeout 300 docker pull "$WEB_IMAGE"
+    - docker image inspect "$DB_IMAGE"  >/dev/null 2>&1 || timeout 300 docker pull "$DB_IMAGE"
+    # Hard down → up. Project name is pinned in the compose file (name: airmark),
+    # so this finds and removes prior containers regardless of build directory.
+    - $DC down --remove-orphans --timeout 30
+    - $DC up -d --wait
+    - echo "=== Container Logs (last 100 lines) ==="
+    - $DC logs --tail=100 --no-color
+
+production-release:
+  extends: .production_rules
+  stage: release
+  needs: [production-build]
+  tags: [Airmark, IL2, Rocky, Proxmox]
+  # On this GitLab/runner combo, step_release still invokes release-cli.
+  # Bootstrap a local release-cli binary so the generated release step can execute.
+  variables:
+    PATH: '${CI_PROJECT_DIR}/.ci/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'
+  # This job does not require Docker; avoid inherited Docker checks/login.
+  before_script: []
+  script:
+    - set -euo pipefail
+    - |
+      if ! command -v release-cli >/dev/null 2>&1; then
+        echo "release-cli not found; installing local binary..."
+        case "$(uname -m)" in
+          x86_64|amd64) RELEASE_CLI_ARCH="amd64" ;;
+          aarch64|arm64) RELEASE_CLI_ARCH="arm64" ;;
+          *)
+            echo "Unsupported architecture for release-cli bootstrap: $(uname -m)" >&2
+            exit 1
+            ;;
+        esac
+        RELEASE_CLI_VERSION="0.17.0"
+        RELEASE_CLI_URL="https://gitlab.com/gitlab-org/release-cli/-/releases/v${RELEASE_CLI_VERSION}/downloads/bin/release-cli-linux-${RELEASE_CLI_ARCH}"
+        mkdir -p .ci/bin
+        curl -fsSL "$RELEASE_CLI_URL" -o .ci/bin/release-cli
+        chmod +x .ci/bin/release-cli
+      fi
+    - release-cli -v
+    - export CHANGELOG_BLOB_URL="${CI_PROJECT_URL}/-/blob/${CI_COMMIT_TAG}/CHANGELOG.md"
+    - export WEB_IMAGE_REPO="${HARBOR_REGISTRY}/${HARBOR_PROJECT}/${WEB_IMAGE_NAME}"
+    - export DB_IMAGE_REPO="${HARBOR_REGISTRY}/${HARBOR_PROJECT}/${DB_IMAGE_NAME}"
+    - export HARBOR_UI_BASE_URL="${HARBOR_UI_BASE_URL%/}"
+    - export WEB_HARBOR_ARTIFACT_URL="${HARBOR_UI_BASE_URL}/projects/${HARBOR_PROJECT}/repositories/${WEB_IMAGE_NAME}"
+    - export DB_HARBOR_ARTIFACT_URL="${HARBOR_UI_BASE_URL}/projects/${HARBOR_PROJECT}/repositories/${DB_IMAGE_NAME}"
+    - |
+      {
+        echo "Release ${CI_COMMIT_TAG}"
+        echo
+        echo "- Pipeline: [View pipeline](${CI_PIPELINE_URL})"
+        echo "- Changelog: [View changelog](${CHANGELOG_BLOB_URL})"
+        echo "- `ttq-web` Harbor artifact: [View image](${WEB_HARBOR_ARTIFACT_URL})"
+        echo "- `ttq-db` Harbor artifact: [View image](${DB_HARBOR_ARTIFACT_URL})"
+        echo
+        echo "### ISSM approval"
+        echo "Use the links above for review, then: **Pipeline** → **deploy** stage → **ISSM Approval** → **Play** (manual job). Deploy stays blocked until approval."
+      } > release-notes.md
+  release:
+    tag_name: $CI_COMMIT_TAG
+    name: 'Release $CI_COMMIT_TAG'
+    description: ./release-notes.md

@@ -1,0 +1,34 @@
+name: Sync release changelog to PR
+
+on:
+  push:
+    branches:
+      - 'release/**'
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Sync PR body from CHANGELOG.next.md
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ ! -f CHANGELOG.next.md ]; then
+            echo "No CHANGELOG.next.md — skipping"
+            exit 0
+          fi
+
+          PR_NUMBER=$(gh pr list --head "${{ github.ref_name }}" --json number --jq '.[0].number // empty')
+          if [ -z "$PR_NUMBER" ]; then
+            echo "No open PR for ${{ github.ref_name }} — skipping"
+            exit 0
+          fi
+
+          node scripts/build-pr-body.js > /tmp/pr-body.md
+          gh pr edit "$PR_NUMBER" --body-file /tmp/pr-body.md
+          echo "Synced PR #$PR_NUMBER"

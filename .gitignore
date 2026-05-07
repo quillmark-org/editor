@@ -1,0 +1,50 @@
+test-results
+node_modules
+
+# Output
+.output
+.vercel
+.netlify
+.wrangler
+/.svelte-kit
+/build
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Env
+# .env.*.local files contain secrets and are never committed
+.env.*.local
+
+# Claude
+.claude/
+
+# DoD production environment (contains secrets)
+deployment/dod/.env.dod
+
+# Certificates (DoD deployment)
+# Public CA chains can be committed (e.g., DoD_PKE_CA_chain.pem)
+# Only ignore private keys and personal certificates
+deployment/dod/certs/*.key
+deployment/dod/certs/*-key.pem
+deployment/dod/certs/client-*.pem
+deployment/dod/certs/client-*.crt
+
+# Vite
+vite.config.js.timestamp-*
+vite.config.ts.timestamp-*
+
+prompts
+.idea
+
+AGENTS.md
+
+# Supabase
+.branches
+.temp
+.env.local
+
+# Grafonnet (observability)
+observability/grafana/vendor/
+observability/grafana/out/

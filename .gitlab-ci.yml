@@ -1,0 +1,34 @@
+# GitLab CI — DOD deployment runner.
+#
+# Staging: manual stub jobs on `main` (see .gitlab/workflows/staging.yml).
+# Production: build → production-release (release) → manual ISSM Approval → automatic deploy; post-deploy helpers in production.yml; fetch-logs in utils.yml.
+#   GitHub Actions: "Prepare release" dispatch → release PR → merge → release.yml tags vX.Y.Z.
+#   Ensure your Git mirror fetches tags from GitHub, or push tags to GitLab explicitly.
+
+include:
+  - local: .gitlab/workflows/staging.yml
+  - local: .gitlab/workflows/production.yml
+  - local: .gitlab/workflows/utils.yml
+
+default:
+  before_script:
+    - whoami
+    - docker --version
+    - docker compose version || docker-compose --version
+
+    - echo "OMNI_HARBOR_USER=${OMNI_HARBOR_USER:-EMPTY}"
+    - echo "OMNI_HARBOR_PASSWORD_LEN=${#OMNI_HARBOR_PASSWORD}"
+
+    - docker logout registry.omni.af.mil || true
+    - |
+      if [ -n "${OMNI_HARBOR_USER:-}" ] && [ -n "${OMNI_HARBOR_PASSWORD:-}" ]; then
+        printf '%s' "$OMNI_HARBOR_PASSWORD" | docker login -u "$OMNI_HARBOR_USER" --password-stdin registry.omni.af.mil
+      else
+        echo "Skipping OMNI Harbor login (missing creds)"
+      fi
+
+stages:
+  - build
+  - release
+  - deploy
+  - utils

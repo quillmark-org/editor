@@ -1,0 +1,46 @@
+# Reference DoD deployment (airmark.omni.af.mil).
+# Select with CONFIG_PATH=deployments/airmark.yaml.
+
+brand:
+  prefix: Air
+  suffix: mark
+  full: airmark
+  displayFull: Airmark
+  copyright: TongueToQuill
+  meta:
+    titleTemplate: '%s — Airmark'
+    defaultTitle: 'Airmark — Official Air Force Memorandum Generator'
+    description: 'Airmark is a CUI-authorized U.S. Air Force memorandum generator. Write in markdown, export professionally typeset official memos, MFRs, LOCs, LORs, and rebuttals with automatic AFH 33-337 Tongue and Quill formatting.'
+    keywords: 'Airmark, Air Force memo generator, CUI authorized, official memorandum, USAF, AFH 33-337, Tongue and Quill, military document editor, MFR generator, LOC generator, LOR generator, rebuttal, markdown, IL5, Air Force correspondence, military writing tool'
+    ogSiteName: Airmark
+  urls:
+    website: https://www.tonguetoquill.com
+    about: https://www.tonguetoquill.com/about
+    terms: https://www.tonguetoquill.com/terms
+    privacy: https://www.tonguetoquill.com/privacy
+
+classification:
+  label: Dynamic Content - Max Content - CUI
+  showBanner: true
+  bannerTone: cui
+  useInternalTerms: true
+  sessionMaxAgeSeconds: 3600
+
+auth:
+  guestMode: false
+  providers:
+    oidc:
+      id: usaf # auth.js callback slug — must match what's registered with the IdP
+      name: 'USAF Login'
+      issuer: https://identity.omni.af.mil/realms/OMNI
+      envPrefix: AUTH_USAF # backwards compat: keep AUTH_USAF_CLIENT_ID/SECRET
+
+features:
+  mobile: false
+  feedback:
+    upstream: gitlab
+  cron:
+    enabled: true
+
+db:
+  driver: pg

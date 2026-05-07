@@ -1,0 +1,25 @@
+name: Release checks
+
+on:
+  push:
+    branches:
+      - 'release/**'
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  validate-changelog:
+    if: |
+      github.event_name == 'push' ||
+      startsWith(github.head_ref, 'release/')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate latest CHANGELOG.md entry
+        run: |
+          node scripts/apply-changelog.js --extract > /tmp/changelog-entry.md
+          node scripts/validate-changelog.js /tmp/changelog-entry.md

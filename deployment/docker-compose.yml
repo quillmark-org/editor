@@ -1,0 +1,29 @@
+services:
+  app:
+    build:
+      context: ..
+      dockerfile: deployment/Dockerfile
+    env_file: .env.dev-self
+    ports:
+      - '3000:3000'
+    depends_on:
+      - db
+    environment:
+      # CONFIG_PATH selects which deployment YAML to load. See deployments/.
+      CONFIG_PATH: ${CONFIG_PATH:-deployments/selfhosted.yaml}
+      # DB connection (cascade requires this when YAML db.driver is pg or neon).
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/tonguetoquill
+
+  db:
+    image: cgr.dev/chainguard/postgres:latest
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: tonguetoquill
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - '5432:5432'
+
+volumes:
+  pgdata:

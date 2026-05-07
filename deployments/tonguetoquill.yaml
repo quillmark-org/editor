@@ -1,0 +1,37 @@
+# Reference commercial deployment (tonguetoquill.com).
+# Select with CONFIG_PATH=deployments/tonguetoquill.yaml.
+
+brand:
+  prefix: tongueto
+  suffix: quill
+  full: tonguetoquill
+  displayFull: TongueToQuill
+  copyright: TongueToQuill
+  meta:
+    titleTemplate: '%s — TongueToQuill'
+    defaultTitle: 'TongueToQuill — Military Document Editor'
+    description: 'Write in markdown, export professionally typeset military documents. Free memo, MFR, LOC, LOR, and rebuttal generator with automatic AFH 33-337 Tongue and Quill formatting for Air Force and Space Force.'
+    keywords: 'military document editor, Air Force memo generator, markdown military documents, AFH 33-337, Tongue and Quill, USAF memorandum, MFR generator, LOC generator, LOR generator, official memorandum, Air Force writing, Space Force, military correspondence, rebuttal generator'
+    ogSiteName: TongueToQuill
+  urls:
+    website: https://www.tonguetoquill.com
+    about: https://www.tonguetoquill.com/about
+    terms: https://www.tonguetoquill.com/terms
+    privacy: https://www.tonguetoquill.com/privacy
+
+auth:
+  guestMode: true
+  providers:
+    github: true
+    google: true
+
+features:
+  feedback:
+    upstream: github
+  cron:
+    enabled: true
+  mcp:
+    enabled: true
+
+db:
+  driver: neon

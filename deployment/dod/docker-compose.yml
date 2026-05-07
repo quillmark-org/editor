@@ -1,0 +1,87 @@
+name: airmark
+
+services:
+  app:
+    image: ${WEB_IMAGE:-registry.omni.af.mil/tonguetoquill/ttq-web:latest}
+    platform: linux/amd64
+    build:
+      context: ../..
+      dockerfile: deployment/dod/Dockerfile
+      cache_from:
+        - registry.omni.af.mil/tonguetoquill/ttq-web:latest
+      args:
+        BUILDKIT_INLINE_CACHE: '1'
+    env_file:
+      - path: .env.dod
+        required: false # Optional: uses GitLab CI/CD variables when not present
+    ports:
+      - '3000:3000'
+    stop_grace_period: 30s
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://localhost:3000/api/health').then(r => r.ok ? process.exit(0) : process.exit(1)).catch(() => process.exit(1))"
+        ]
+      interval: 3s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    environment:
+      # CONFIG_PATH selects the deployment YAML. Behavior (brand,
+      # classification, auth provider toggles, db driver, features) lives
+      # in deployments/airmark.yaml — not here. Only secrets and the
+      # CONFIG_PATH bootstrap pointer belong in this environment block.
+      CONFIG_PATH: ${CONFIG_PATH:-deployments/airmark.yaml}
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD}@db:5432/tonguetoquill
+      AUTH_SECRET: ${AUTH_SECRET}
+      AUTH_USAF_CLIENT_ID: ${AUTH_USAF_CLIENT_ID}
+      AUTH_USAF_CLIENT_SECRET: ${AUTH_USAF_CLIENT_SECRET}
+      CRON_SECRET: ${CRON_SECRET}
+      FEEDBACK_GITLAB_URL: ${FEEDBACK_GITLAB_URL}
+      FEEDBACK_GITLAB_KEY: ${FEEDBACK_GITLAB_KEY}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+
+  fix-permissions:
+    image: ${DB_IMAGE:-registry.omni.af.mil/tonguetoquill/ttq-db:latest}
+    platform: linux/amd64
+    user: '0:0'
+    entrypoint: ['sh', '-c', 'chown -R 70:70 /var/lib/postgresql/data']
+    volumes:
+      - db-data:/var/lib/postgresql/data
+
+  db:
+    platform: linux/amd64
+    image: ${DB_IMAGE:-registry.omni.af.mil/tonguetoquill/ttq-db:latest}
+    build:
+      context: .
+      dockerfile_inline: |
+        FROM cgr.dev/chainguard/postgres:latest
+    depends_on:
+      fix-permissions:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres']
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: tonguetoquill
+      PGDATA: /var/lib/postgresql/data/pgdata
+    init: true
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    ports:
+      - '5432:5432'
+
+volumes:
+  db-data:
+    name: airmark_db-data
+    external: false

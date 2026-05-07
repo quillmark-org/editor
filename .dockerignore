@@ -1,0 +1,49 @@
+# VCS and CI config
+.git
+.gitignore
+.github
+.gitlab
+.gitlab-ci.yml
+
+# Build outputs / caches
+node_modules
+.svelte-kit
+build
+test-results
+.vercel
+.netlify
+.wrangler
+.output
+
+# Environment (secrets, test defaults)
+.env
+.env.*
+
+# Editor / OS / tooling
+.DS_Store
+Thumbs.db
+.idea
+.claude
+.husky
+.devcontainer.json
+.prettierignore
+.prettierrc
+.npmrc
+.nvmrc
+
+# Tests (not used by production image)
+e2e
+tests
+playwright.config.ts
+vitest-setup-client.ts
+
+# Docs and project-only files
+*.md
+!CHANGELOG.md
+proposals
+prose
+observability
+template_library_ui_assessment.md
+
+# Other deploy targets unused by the DoD build
+vercel.json

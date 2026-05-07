@@ -1,0 +1,125 @@
+name: Prepare release
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: Version bump type
+        required: true
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Compute next version
+        id: version
+        run: |
+          CURRENT=$(node -p "require('./package.json').version")
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT"
+
+          case "${{ inputs.bump }}" in
+            major) NEXT="$((MAJOR + 1)).0.0" ;;
+            minor) NEXT="${MAJOR}.$((MINOR + 1)).0" ;;
+            patch) NEXT="${MAJOR}.${MINOR}.$((PATCH + 1))" ;;
+          esac
+
+          echo "current=$CURRENT" >> "$GITHUB_OUTPUT"
+          echo "next=$NEXT" >> "$GITHUB_OUTPUT"
+          echo "Bumping $CURRENT → $NEXT"
+
+      - name: Check for existing release branch
+        run: |
+          BRANCH="release/v${{ steps.version.outputs.next }}"
+          if git ls-remote --exit-code origin "refs/heads/$BRANCH" 2>/dev/null; then
+            echo "::error::Branch $BRANCH already exists. A release may be in progress."
+            exit 1
+          fi
+
+      - name: Find last patch release tag
+        id: tag
+        run: |
+          # Changelog baseline: latest tag that is strict semver X.Y.Z only (optional v prefix).
+          # Skip letter suffix tags (e.g. v0.0.12a) so the range includes all post-patch commits.
+          LAST=""
+          while IFS= read -r t; do
+            [[ -n "$t" ]] || continue
+            if [[ "$t" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              LAST="$t"
+              break
+            fi
+          done < <(git tag -l --sort=-v:refname)
+
+          if [[ -n "$LAST" ]]; then
+            echo "last=$LAST" >> "$GITHUB_OUTPUT"
+            echo "Last patch release tag: $LAST"
+          else
+            echo "last=" >> "$GITHUB_OUTPUT"
+            echo "No previous patch release tags found (strict X.Y.Z only)"
+          fi
+
+      - name: Bump package.json version
+        run: |
+          node -e "
+            const fs = require('fs');
+            const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+            pkg.version = '${{ steps.version.outputs.next }}';
+            fs.writeFileSync('package.json', JSON.stringify(pkg, null, '\t') + '\n');
+          "
+
+      - name: Generate changelog via Anthropic API
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          node scripts/generate-changelog.js \
+            "${{ steps.version.outputs.next }}" \
+            "${{ steps.tag.outputs.last }}" \
+            > CHANGELOG.next.md
+
+          echo "Generated CHANGELOG.next.md:"
+          cat CHANGELOG.next.md
+
+      - name: Validate changelog
+        run: node scripts/validate-changelog.js
+
+      - name: Apply changelog to CHANGELOG.md
+        run: node scripts/apply-changelog.js
+
+      - name: Create release branch and push
+        run: |
+          VERSION="${{ steps.version.outputs.next }}"
+          BRANCH="release/v${VERSION}"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$BRANCH"
+          git add package.json CHANGELOG.md
+          git commit -m "chore(release): v${VERSION}"
+          git push -u origin "$BRANCH"
+
+      - name: Open pull request
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${{ steps.version.outputs.next }}"
+          BRANCH="release/v${VERSION}"
+
+          BODY=$(node scripts/build-pr-body.js)
+
+          gh pr create \
+            --title "chore(release): v${VERSION}" \
+            --body "$BODY" \
+            --base main \
+            --head "$BRANCH"

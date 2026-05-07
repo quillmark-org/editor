@@ -1,0 +1,362 @@
+# Operational helpers — manual on any pipeline (same as before). Run from a tag pipeline to match a release.
+# All jobs use raw docker commands keyed on compose labels so they work even when Harbor is unreachable.
+
+host-down:
+  # Stop + remove ALL containers on the runner host. Use to clear stale stacks
+  # from prior project names (e.g., before the first deploy after pinning
+  # `name: airmark` in compose) or to recover from a wedged host.
+  # Preserves: named volumes (db-data is safe), images, build cache.
+  stage: utils
+  needs: []
+  tags: [Airmark, IL2, Rocky, Proxmox]
+  rules:
+    - when: manual
+  script:
+    - set -euo pipefail
+    - echo "=== Containers before ==="
+    - docker ps -a --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}'
+    - echo ""
+    - echo "Stopping all containers (30s grace for clean shutdown)..."
+    - docker ps -q | xargs -r docker stop -t 30
+    - echo "Removing all containers..."
+    - docker ps -aq | xargs -r docker rm
+    - echo "Pruning unused networks..."
+    - docker network prune -f
+    - echo ""
+    - echo "=== Containers after ==="
+    - docker ps -a
+    - echo ""
+    - echo "=== Volumes (preserved) ==="
+    - docker volume ls
+
+fetch-logs:
+  stage: utils
+  needs: []
+  tags: [Airmark, IL2, Rocky, Proxmox]
+  script:
+    - echo "Fetching logs from running containers..."
+    - |
+      docker ps -qaf "label=com.docker.compose.project=airmark" \
+        | xargs -r -I{} sh -c 'echo "=== $(docker inspect --format "{{.Name}}" {}) ===" && docker logs --tail=1000 --no-color {}' \
+        > container_logs.txt 2>&1
+    - echo "=== Container Logs (last 1000 lines) ==="
+    - cat container_logs.txt
+    - echo "Logs also saved to artifact for download."
+  artifacts:
+    paths:
+      - container_logs.txt
+    expire_in: 7 days
+  rules:
+    - when: manual
+
+list-status:
+  stage: utils
+  needs: []
+  tags: [Airmark, IL2, Rocky, Proxmox]
+  script:
+    - echo "=== Docker Containers & Ports ==="
+    - docker container ls -a --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+    - echo ""
+    - echo "=== Listening Ports (Host) ==="
+    - ss -tulpn || netstat -tulpn || echo "network tools not available"
+  rules:
+    - when: manual
+
+print-connection-info:
+  stage: utils
+  needs: []
+  tags: [Airmark, IL2, Rocky, Proxmox]
+  script:
+    - PUBLIC_IP=$(curl -s ifconfig.me)
+    - echo "=== Public Access Info ==="
+    - 'echo "Public IP: $PUBLIC_IP"'
+    - echo ""
+    - echo "=== PostgreSQL Connection ==="
+    - DB_CTR=$(docker ps -qf "label=com.docker.compose.project=airmark" -f "label=com.docker.compose.service=db")
+    - 'DB_PORT=$(docker port "$DB_CTR" 5432 | awk -F: ''{print $NF}'' || echo "5432")'
+    - 'echo "Port: $DB_PORT"'
+    - |
+      echo "URL:  postgresql://postgres:[PASSWORD]@$PUBLIC_IP:$DB_PORT/tonguetoquill"
+      echo "Note: Replace [PASSWORD] with the value of your POSTGRES_PASSWORD secret."
+    - echo ""
+    - echo "=== App Server Connection ==="
+    - APP_CTR=$(docker ps -qf "label=com.docker.compose.project=airmark" -f "label=com.docker.compose.service=app")
+    - 'APP_PORT=$(docker port "$APP_CTR" 3000 | awk -F: ''{print $NF}'' || echo "3000")'
+    - 'echo "Port: $APP_PORT"'
+    - 'echo "URL:  http://$PUBLIC_IP:$APP_PORT"'
+  rules:
+    - when: manual
+
+list-schema:
+  stage: utils
+  needs: []
+  tags: [Airmark, IL2, Rocky, Proxmox]
+  variables:
+    PSQL: psql -U postgres -d tonguetoquill --pset=border=2 --pset=format=aligned
+    SEP: '────────────────────────────────────────────────────────────'
+  script:
+    - APP_CTR=$(docker ps -qf "label=com.docker.compose.project=airmark" -f "label=com.docker.compose.service=app")
+    - DB_CTR=$(docker ps -qf "label=com.docker.compose.project=airmark" -f "label=com.docker.compose.service=db")
+    - printf '\n%s\n  🚀  DB-MIGRATE.JS OUTPUT (run now)\n%s\n' "$SEP" "$SEP"
+    - docker exec "$APP_CTR" node scripts/db-migrate.js || echo "⚠️  db-migrate.js exited with error (see above)"
+    - printf '\n%s\n  📋  DRIZZLE MIGRATION HISTORY\n%s\n' "$SEP" "$SEP"
+    - >-
+      docker exec "$DB_CTR" $PSQL -c "
+      SELECT id,
+             left(hash,12) || '…' AS hash_prefix,
+             to_timestamp(created_at/1000)::text AS applied_at
+      FROM drizzle.__drizzle_migrations
+      ORDER BY created_at;"
+      || echo "⚠️  drizzle.__drizzle_migrations table does NOT exist"
+    - printf '\n%s\n  🗂️   ALL SCHEMA TRACKING TABLES (any schema)\n%s\n' "$SEP" "$SEP"
+    - >-
+      docker exec "$DB_CTR" $PSQL -c "
+      SELECT table_schema, table_name
+      FROM information_schema.tables
+      WHERE table_name ILIKE '%migrat%'
+         OR table_name ILIKE '%drizzle%'
+         OR table_name ILIKE '%schema%'
+         OR table_name ILIKE '%version%'
+      ORDER BY table_schema, table_name;"
+    - printf '\n%s\n  🕰️   TABLE CREATION ORDER (by OID — lower = older)\n%s\n' "$SEP" "$SEP"
+    - >-
+      docker exec "$DB_CTR" $PSQL -c "
+      SELECT relname AS table_name,
+             oid,
+             pg_size_pretty(pg_total_relation_size(oid)) AS total_size,
+             reltuples::bigint AS approx_rows
+      FROM pg_class
+      WHERE relnamespace = 'public'::regnamespace
+        AND relkind = 'r'
+      ORDER BY oid ASC;"
+    - printf '\n%s\n  📂  MIGRATION FILES IN CONTAINER\n%s\n' "$SEP" "$SEP"
+    - docker exec "$APP_CTR" ls -1 drizzle/migrations/*.sql 2>/dev/null || echo "(none found)"
+    - printf '\n%s\n  📖  MIGRATION JOURNAL (meta/_journal.json)\n%s\n' "$SEP" "$SEP"
+    - docker exec "$APP_CTR" cat drizzle/migrations/meta/_journal.json
+    - printf '\n%s\n  🗄️   DATABASE TABLES\n%s\n' "$SEP" "$SEP"
+    - docker exec "$DB_CTR" $PSQL -c '\dt public.*'
+    - printf '\n%s\n  📝  COLUMN DETAILS (per table)\n%s\n' "$SEP" "$SEP"
+    - >-
+      docker exec "$DB_CTR" $PSQL -c "
+      SELECT table_name AS tbl,
+             column_name AS col,
+             data_type AS type,
+             CASE is_nullable WHEN 'YES' THEN '✓' ELSE '' END AS nullable,
+             coalesce(left(column_default,40),'') AS default_val
+      FROM information_schema.columns
+      WHERE table_schema = 'public'
+      ORDER BY table_name, ordinal_position;"
+    - printf '\n%s\n  🔑  INDEXES\n%s\n' "$SEP" "$SEP"
+    - >-
+      docker exec "$DB_CTR" $PSQL -c "
+      SELECT tablename AS tbl,
+             indexname AS idx,
+             indexdef AS definition
+      FROM pg_indexes
+      WHERE schemaname = 'public'
+      ORDER BY tablename, indexname;"
+    - printf '\n%s\n  🔗  FOREIGN KEYS\n%s\n' "$SEP" "$SEP"
+    - >-
+      docker exec "$DB_CTR" $PSQL -c "
+      SELECT conrelid::regclass AS tbl,
+             conname AS constraint,
+             pg_get_constraintdef(oid) AS definition
+      FROM pg_constraint
+      WHERE contype = 'f'
+        AND connamespace = 'public'::regnamespace
+      ORDER BY conrelid::regclass::text, conname;"
+    - printf '\n%s\n  ✅  CHECK CONSTRAINTS\n%s\n' "$SEP" "$SEP"
+    - >-
+      docker exec "$DB_CTR" $PSQL -c "
+      SELECT conrelid::regclass AS tbl,
+             conname AS constraint,
+             pg_get_constraintdef(oid) AS definition
+      FROM pg_constraint
+      WHERE contype = 'c'
+        AND connamespace = 'public'::regnamespace
+      ORDER BY conrelid::regclass::text, conname;"
+    - printf '\n%s\n  🏁  DONE\n%s\n\n' "$SEP" "$SEP"
+  rules:
+    - when: manual
+
+backup-db:
+  stage: utils
+  needs: []
+  tags: [Airmark, IL2, Rocky, Proxmox]
+  script:
+    - set -euo pipefail
+    - echo "Backing up tonguetoquill database..."
+    - DB_CTR=$(docker ps -qf "label=com.docker.compose.project=airmark" -f "label=com.docker.compose.service=db")
+    - docker exec "$DB_CTR" pg_dump -U postgres -Fc tonguetoquill > backup.dump
+    - ls -lh backup.dump
+    - echo "Backup complete."
+  artifacts:
+    paths:
+      - backup.dump
+    expire_in: 30 days
+  rules:
+    - when: manual
+
+restore-db:
+  stage: utils
+  needs:
+    - job: backup-db
+      artifacts: true
+  tags: [Airmark, IL2, Rocky, Proxmox]
+  script:
+    - set -euo pipefail
+    - ls -lh backup.dump
+    - echo "Restoring..."
+    - DB_CTR=$(docker ps -qf "label=com.docker.compose.project=airmark" -f "label=com.docker.compose.service=db")
+    - docker exec -i "$DB_CTR" pg_restore -U postgres -d tonguetoquill --clean --if-exists < backup.dump
+    - echo "Restore complete."
+  rules:
+    - when: manual
+
+migrate-db:
+  stage: utils
+  needs:
+    - job: backup-db
+      artifacts: true
+  tags: [Airmark, IL2, Rocky, Proxmox]
+  script:
+    - set -euo pipefail
+    - ls -lh backup.dump
+    - echo "Running production database migrations..."
+    - APP_CTR=$(docker ps -qf "label=com.docker.compose.project=airmark" -f "label=com.docker.compose.service=app")
+    - docker exec "$APP_CTR" node scripts/db-migrate.js
+    - echo "Production migration complete."
+  rules:
+    - when: manual
+
+unpublish-template:
+  stage: utils
+  needs:
+    - job: backup-db
+      artifacts: true
+  tags: [Airmark, IL2, Rocky, Proxmox]
+  script:
+    - set -euo pipefail
+    - |
+      if [ -z "${TEMPLATE_ID:-}" ]; then
+        echo "ERROR: TEMPLATE_ID is required (UUID)." >&2
+        exit 1
+      fi
+    - |
+      if ! [[ "$TEMPLATE_ID" =~ ^[0-9a-fA-F-]{36}$ ]]; then
+        echo "ERROR: TEMPLATE_ID must be a valid UUID." >&2
+        exit 1
+      fi
+    - echo "Unpublishing template ${TEMPLATE_ID}..."
+    - APP_CTR=$(docker ps -qf "label=com.docker.compose.project=airmark" -f "label=com.docker.compose.service=app")
+    - docker exec "$APP_CTR" node scripts/unpublish-template.js "$TEMPLATE_ID"
+  rules:
+    - when: manual
+
+repair-template:
+  stage: utils
+  needs:
+    - job: backup-db
+      artifacts: true
+  tags: [Airmark, IL2, Rocky, Proxmox]
+  script:
+    - set -euo pipefail
+    - |
+      if [ -z "${TEMPLATE_ID:-}" ]; then
+        echo "ERROR: TEMPLATE_ID is required (UUID)." >&2
+        exit 1
+      fi
+    - |
+      if ! [[ "$TEMPLATE_ID" =~ ^[0-9a-fA-F-]{36}$ ]]; then
+        echo "ERROR: TEMPLATE_ID must be a valid UUID." >&2
+        exit 1
+      fi
+    - echo "Repairing template ${TEMPLATE_ID} (template row + linked document via app HTTP cron route)..."
+    - APP_CTR=$(docker ps -qf "label=com.docker.compose.project=airmark" -f "label=com.docker.compose.service=app")
+    - |
+      docker exec \
+        -e TEMPLATE_ID="$TEMPLATE_ID" \
+        -e DRY_RUN="${DRY_RUN:-false}" \
+        "$APP_CTR" node -e '
+      (async () => {
+        const templateId = process.env.TEMPLATE_ID;
+        const dryRun = process.env.DRY_RUN ?? "false";
+        const secret = process.env.CRON_SECRET;
+        if (!secret) {
+          console.error("ERROR: app container is missing CRON_SECRET.");
+          process.exit(2);
+        }
+
+        const url = `http://127.0.0.1:3000/api/cron/repair-template?template_id=${encodeURIComponent(templateId)}&dry_run=${encodeURIComponent(dryRun)}`;
+        const response = await fetch(url, {
+          headers: { authorization: `Bearer ${secret}` }
+        });
+
+        const body = await response.text();
+        if (body) console.log(body);
+
+        if (!response.ok) {
+          console.error(`ERROR: cron endpoint call failed with HTTP ${response.status}.`);
+          process.exit(3);
+        }
+      })().catch((error) => {
+        console.error("ERROR: failed to call cron endpoint.");
+        console.error(error instanceof Error ? error.message : error);
+        process.exit(4);
+      });
+      '
+  rules:
+    - when: manual
+
+mark-template-official:
+  stage: utils
+  needs:
+    - job: backup-db
+      artifacts: true
+  tags: [Airmark, IL2, Rocky, Proxmox]
+  script:
+    - set -euo pipefail
+    - |
+      if [ -z "${TEMPLATE_ID:-}" ]; then
+        echo "ERROR: TEMPLATE_ID is required (UUID)." >&2
+        exit 1
+      fi
+    - |
+      if ! [[ "$TEMPLATE_ID" =~ ^[0-9a-fA-F-]{36}$ ]]; then
+        echo "ERROR: TEMPLATE_ID must be a valid UUID." >&2
+        exit 1
+      fi
+    - echo "Marking template ${TEMPLATE_ID} as official via app HTTP cron route..."
+    - APP_CTR=$(docker ps -qf "label=com.docker.compose.project=airmark" -f "label=com.docker.compose.service=app")
+    - |
+      docker exec \
+        -e TEMPLATE_ID="$TEMPLATE_ID" \
+        "$APP_CTR" node -e '
+      (async () => {
+        const templateId = process.env.TEMPLATE_ID;
+        const secret = process.env.CRON_SECRET;
+        if (!secret) {
+          console.error("ERROR: app container is missing CRON_SECRET.");
+          process.exit(2);
+        }
+
+        const url = `http://127.0.0.1:3000/api/cron/mark-template-official?template_id=${encodeURIComponent(templateId)}`;
+        const response = await fetch(url, {
+          headers: { authorization: `Bearer ${secret}` }
+        });
+
+        const body = await response.text();
+        if (body) console.log(body);
+
+        if (!response.ok) {
+          console.error(`ERROR: cron endpoint call failed with HTTP ${response.status}.`);
+          process.exit(3);
+        }
+      })().catch((error) => {
+        console.error("ERROR: failed to call cron endpoint.");
+        console.error(error instanceof Error ? error.message : error);
+        process.exit(4);
+      });
+      '
+  rules:
+    - when: manual

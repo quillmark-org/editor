@@ -1,0 +1,18 @@
+apiVersion: 1
+
+datasources:
+  - name: TongueToQuill PostgreSQL
+    type: grafana-postgresql-datasource
+    uid: tonguetoquill_postgres
+    access: proxy
+    url: ${POSTGRES_HOST}:${POSTGRES_PORT}
+    database: ${POSTGRES_DB}
+    user: ${POSTGRES_READONLY_USER}
+    isDefault: true
+    editable: false
+    jsonData:
+      sslmode: disable
+      postgresVersion: 1500
+      timescaledb: false
+    secureJsonData:
+      password: ${POSTGRES_READONLY_PASSWORD}
