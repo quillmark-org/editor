@@ -63,6 +63,7 @@
   },
   "devDependencies": {
     "@quillmark/quiver": "^0.7.0",
+    "playwright": "^1.49.0",
     "@quillmark/wasm": "0.75.0",
     "@sveltejs/adapter-static": "^3.0.6",
     "@sveltejs/kit": "^2.56.1",
