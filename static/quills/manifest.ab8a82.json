@@ -1,0 +1,56 @@
+{
+  "version": 1,
+  "name": "airmark",
+  "quills": [
+    {
+      "name": "af4141",
+      "version": "0.1.0",
+      "bundle": "af4141@0.1.0.14e534.zip",
+      "fonts": {
+        "assets/Figtree-Bold.ttf": "c35c3ee5c1bab1acfe1e0d71549dd501",
+        "assets/Figtree-Italic.ttf": "9d65a509684b10766dfc3238d886a494",
+        "assets/Figtree-Regular.ttf": "fde4a0ff6b61f88efd09f91f41c9a6da",
+        "assets/NimbusRomNo9L-Med.otf": "64a7bdb0b32882da2902afa2e1a96b61",
+        "assets/NimbusRomNo9L-MedIta.otf": "7a1b36f43821089bc4d6dd515b9fc04c",
+        "assets/NimbusRomNo9L-Reg.otf": "aa30cb0dc88a37eeba19d87256730d3a",
+        "assets/NimbusRomNo9L-RegIta.otf": "62c1a9fd3acf35e93dca153c3e29df89"
+      }
+    },
+    {
+      "name": "daf1206",
+      "version": "0.1.0",
+      "bundle": "daf1206@0.1.0.664c1a.zip",
+      "fonts": {
+        "assets/arimo-v35-latin-700.ttf": "b32f4945f73c80c24dee411770c7985b",
+        "assets/arimo-v35-latin-700italic.ttf": "4ea0e7b38275a1b3c4e481b3f1368753",
+        "assets/arimo-v35-latin-italic.ttf": "83ea6fc86f400418b5f5aabeb0a36a5b",
+        "assets/arimo-v35-latin-regular.ttf": "23906d96e1290056494d33a6b592d20c"
+      }
+    },
+    {
+      "name": "daf4392",
+      "version": "0.1.0",
+      "bundle": "daf4392@0.1.0.309df1.zip",
+      "fonts": {
+        "assets/arimo-v35-latin-700.ttf": "b32f4945f73c80c24dee411770c7985b",
+        "assets/arimo-v35-latin-700italic.ttf": "4ea0e7b38275a1b3c4e481b3f1368753",
+        "assets/arimo-v35-latin-italic.ttf": "83ea6fc86f400418b5f5aabeb0a36a5b",
+        "assets/arimo-v35-latin-regular.ttf": "23906d96e1290056494d33a6b592d20c"
+      }
+    },
+    {
+      "name": "usaf_memo",
+      "version": "0.2.0",
+      "bundle": "usaf_memo@0.2.0.e5384c.zip",
+      "fonts": {
+        "packages/tonguetoquill-usaf-memo/fonts/Cinzel/Cinzel-Regular.ttf": "1751891facafee36e80586cfed227fc1",
+        "packages/tonguetoquill-usaf-memo/fonts/CopperplateCC/CopperplateCC-Bold.otf": "5f31010bf573a8bb7bc33c8549758950",
+        "packages/tonguetoquill-usaf-memo/fonts/CopperplateCC/CopperplateCC-Heavy.otf": "02b6fb97dc140e2cfd95ad2168276012",
+        "packages/tonguetoquill-usaf-memo/fonts/NimbusRomanNo9L/NimbusRomNo9L-Med.otf": "64a7bdb0b32882da2902afa2e1a96b61",
+        "packages/tonguetoquill-usaf-memo/fonts/NimbusRomanNo9L/NimbusRomNo9L-MedIta.otf": "7a1b36f43821089bc4d6dd515b9fc04c",
+        "packages/tonguetoquill-usaf-memo/fonts/NimbusRomanNo9L/NimbusRomNo9L-Reg.otf": "aa30cb0dc88a37eeba19d87256730d3a",
+        "packages/tonguetoquill-usaf-memo/fonts/NimbusRomanNo9L/NimbusRomNo9L-RegIta.otf": "62c1a9fd3acf35e93dca153c3e29df89"
+      }
+    }
+  ]
+}
