@@ -11,7 +11,7 @@ import { registerRichText, HeadingNode, QuoteNode } from '@lexical/rich-text';
 import { registerHistory, createEmptyHistoryState } from '@lexical/history';
 import { registerList, ListNode, ListItemNode } from '@lexical/list';
 import { LinkNode } from '@lexical/link';
-import { CodeNode } from '@lexical/code';
+import { CodeNode } from '@lexical/code-core';
 import {
 	TableCellNode,
 	TableNode,
