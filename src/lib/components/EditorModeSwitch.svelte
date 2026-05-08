@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { ToggleLeft, ToggleRight } from 'lucide-svelte';
-	import type { EditorMode } from '$lib/editor/prosemirror';
+	import type { EditorMode } from '$lib/types';
 
 	interface Props {
 		mode: EditorMode;

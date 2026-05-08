@@ -37,8 +37,8 @@
     "**/*.css"
   ],
   "peerDependencies": {
-    "svelte": "^5",
-    "@quillmark/wasm": "^0.75.0"
+    "@quillmark/wasm": "^0.75.0",
+    "svelte": "^5"
   },
   "dependencies": {
     "@codemirror/commands": "^6.10.0",
@@ -46,20 +46,17 @@
     "@codemirror/language": "^6.11.3",
     "@codemirror/state": "^6.5.2",
     "@codemirror/view": "^6.38.6",
+    "@lexical/code-core": "^0.44.0",
+    "@lexical/history": "^0.44.0",
+    "@lexical/link": "^0.44.0",
+    "@lexical/list": "^0.44.0",
+    "@lexical/markdown": "^0.44.0",
+    "@lexical/rich-text": "^0.44.0",
+    "@lexical/selection": "^0.44.0",
+    "@lexical/table": "^0.44.0",
+    "@lexical/utils": "^0.44.0",
+    "lexical": "^0.44.0",
     "lucide-svelte": "^0.548.0",
-    "prosemirror-commands": "^1.7.1",
-    "prosemirror-dropcursor": "^1.8.2",
-    "prosemirror-gapcursor": "^1.4.0",
-    "prosemirror-history": "^1.5.0",
-    "prosemirror-inputrules": "^1.5.1",
-    "prosemirror-keymap": "^1.2.3",
-    "prosemirror-markdown": "^1.13.2",
-    "prosemirror-model": "^1.25.4",
-    "prosemirror-schema-list": "^1.5.1",
-    "prosemirror-state": "^1.4.4",
-    "prosemirror-tables": "^1.8.5",
-    "prosemirror-transform": "^1.10.5",
-    "prosemirror-view": "^1.41.4",
     "yaml": "^2.8.2",
     "zod": "^4.1.12"
   },

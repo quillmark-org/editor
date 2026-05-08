@@ -12,7 +12,9 @@ export { default as MetadataWidget } from './components/MetadataWidget.svelte';
 export { default as RichTextToolbar } from './components/RichTextToolbar.svelte';
 export { default as AdvancedToolbar } from './components/AdvancedToolbar.svelte';
 export { default as SelectionToolbar } from './components/SelectionToolbar.svelte';
-export { default as TableControls } from './components/TableControls.svelte';
+// NOTE: TableControls (Obsidian-style hover bars) has been removed during the
+// Lexical migration spike. Tables can still be inserted/edited via the
+// built-in table commands; richer cell-level UI is a follow-up.
 export { default as EditorModeSwitch } from './components/EditorModeSwitch.svelte';
 export { default as EditorBlock } from './components/EditorBlock.svelte';
 
@@ -36,14 +38,18 @@ export type {
 // ─── Editor model ────────────────────────────────────────────────────────
 export { EditorStateStore } from './editor/editorState.svelte.js';
 
-// ─── ProseMirror primitives (advanced composition) ───────────────────────
+// ─── Lexical primitives (advanced composition) ──────────────────────────
 export {
-	quillmarkSchema,
-	quillmarkParser,
-	quillmarkSerializer,
-	parseMarkdown,
-	serializeMarkdown
-} from './editor/prosemirror/index.js';
+	createQuillmarkEditor,
+	parseMarkdownInto,
+	readMarkdown,
+	QUILLMARK_TRANSFORMERS,
+	InlineMetadataNode,
+	$createInlineMetadataNode,
+	$isInlineMetadataNode,
+	applyFormat
+} from './editor/lexical/index.js';
+export type { QuillmarkEditorBundle, FormatType } from './editor/lexical/index.js';
 
 // ─── Render-result helpers ───────────────────────────────────────────────
 export { resultToBlob, resultToSVGPages } from './utils/render-result.js';
