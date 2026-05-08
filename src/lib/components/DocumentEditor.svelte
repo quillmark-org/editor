@@ -72,9 +72,9 @@
 
 	const parsedQuillName = $derived.by<string | null>(() => {
 		if (!debouncedContent || !ctx.isReady) return null;
-		const fmMatch = debouncedContent.match(/^---\r?\n([\s\S]*?)^---\s*$/m);
+		const fmMatch = debouncedContent.match(/^---[ \t]*\r?\n([\s\S]*?)^---[ \t]*$/m);
 		if (!fmMatch) return null;
-		const quillMatch = fmMatch[1].match(/^QUILL:\s*(\S+)/m);
+		const quillMatch = fmMatch[1].match(/^QUILL:[ \t]*(\S+)/m);
 		return quillMatch ? quillMatch[1] : null;
 	});
 
