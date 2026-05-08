@@ -21,7 +21,6 @@ import {
 } from '@lexical/table';
 import { registerMarkdownShortcuts } from '@lexical/markdown';
 
-import { InlineMetadataNode } from './inline-metadata-node';
 import { QUILLMARK_TRANSFORMERS } from './transformers';
 import { quillmarkTheme } from './theme';
 
@@ -61,9 +60,7 @@ export function createQuillmarkEditor(options: {
 			// table
 			TableNode,
 			TableRowNode,
-			TableCellNode,
-			// custom
-			InlineMetadataNode
+			TableCellNode
 		]
 	});
 

@@ -316,14 +316,4 @@
 		background: var(--qm-secondary);
 		font-weight: 600;
 	}
-
-	/* Inline metadata separator */
-	.lexical-container :global(.qm-inline-metadata) {
-		height: 2px;
-		margin: 0.5rem 0;
-		background: linear-gradient(90deg, transparent, var(--qm-border), transparent);
-		border-radius: 1px;
-		opacity: 0.6;
-		pointer-events: none;
-	}
 </style>

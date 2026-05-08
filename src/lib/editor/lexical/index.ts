@@ -7,14 +7,7 @@ export type { QuillmarkEditorBundle } from './editor-config';
 
 export { quillmarkTheme } from './theme';
 
-export { QUILLMARK_TRANSFORMERS, UNDERLINE, INLINE_METADATA } from './transformers';
-
-export {
-	InlineMetadataNode,
-	$createInlineMetadataNode,
-	$isInlineMetadataNode
-} from './inline-metadata-node';
-export type { SerializedInlineMetadataNode } from './inline-metadata-node';
+export { QUILLMARK_TRANSFORMERS, UNDERLINE } from './transformers';
 
 export { parseMarkdownInto, $serializeToMarkdown, readMarkdown } from './markdown';
 
