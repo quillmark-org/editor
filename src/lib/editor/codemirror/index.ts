@@ -1,11 +1,8 @@
 /**
- * QuillMark editor features for CodeMirror
- * Provides syntax highlighting, folding, and auto-completion for QuillMark syntax
+ * QuillMark editor features for CodeMirror — metadata-block syntax decoration
+ * and structural keybindings for the advanced-mode markdown editor.
  */
 
 export { quillmarkDecorator } from './quillmark-decorator';
 export { createQuillmarkTheme } from './quillmark-theme';
-export { quillmarkFoldService } from './quillmark-folding';
-export { placeholderClickHandler } from './placeholder-handler';
-export { foldAllMetadataBlocks, toggleAllMetadataBlocks } from './quillmark-fold-utils';
 export { createEditorKeymaps } from './editor-keybindings';
