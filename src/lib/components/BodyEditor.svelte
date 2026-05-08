@@ -3,7 +3,7 @@
 	 * BodyEditor - Reusable Lexical-based rich text editor component.
 	 * Used for both the primary document body and card bodies.
 	 *
-	 *   props:   content, placeholder, onChange, onParseFallback
+	 *   props:   content, placeholder, onChange
 	 *   exports: focus(), handleFormat(type)
 	 */
 	import { onMount, onDestroy } from 'svelte';
@@ -26,20 +26,9 @@
 		placeholder?: string;
 		/** Callback when content changes */
 		onChange: (content: string) => void;
-		/**
-		 * Called when the markdown parser falls back to plain text (structural
-		 * content lost). Lets parents surface a diagnostic so the user knows
-		 * their formatting was flattened.
-		 */
-		onParseFallback?: (error: unknown) => void;
 	}
 
-	let {
-		content,
-		placeholder = 'Enter content...',
-		onChange,
-		onParseFallback
-	}: Props = $props();
+	let { content, placeholder = 'Enter content...', onChange }: Props = $props();
 
 	let editorElement: HTMLDivElement | undefined = $state();
 	let containerElement: HTMLDivElement | undefined = $state();
@@ -81,7 +70,7 @@
 
 	function importContent(next: string) {
 		if (!editor) return;
-		parseMarkdownInto(editor, next ?? '', onParseFallback);
+		parseMarkdownInto(editor, next ?? '');
 		lastImportedContent = next ?? '';
 		isEmpty = isDocumentEmpty(editor);
 	}

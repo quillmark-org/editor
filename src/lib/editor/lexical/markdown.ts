@@ -2,8 +2,8 @@
  * Thin wrappers around @lexical/markdown's import/export entry points,
  * pre-bound to QUILLMARK_TRANSFORMERS.
  *
- * Exposes a `parseMarkdownInto(editor, markdown, onFallback?)` that mirrors
- * the legacy ProseMirror parser's fallback-on-error behaviour.
+ * `parseMarkdownInto` falls back to a single plain-text paragraph if
+ * @lexical/markdown throws.
  */
 
 import {
@@ -45,15 +45,11 @@ function postprocessExportedMarkdown(markdown: string): string {
 }
 
 /**
- * Replace the editor's contents with the parsed markdown. If parsing throws
- * (or yields an unexpected empty doc with non-empty input), populates the
- * root with the raw markdown as a single paragraph and invokes `onFallback`.
+ * Replace the editor's contents with the parsed markdown. If parsing throws,
+ * falls back to a single paragraph containing the raw markdown so the user
+ * doesn't lose their content.
  */
-export function parseMarkdownInto(
-	editor: LexicalEditor,
-	markdown: string,
-	onFallback?: (error: unknown) => void
-): void {
+export function parseMarkdownInto(editor: LexicalEditor, markdown: string): void {
 	editor.update(
 		() => {
 			try {
@@ -65,6 +61,7 @@ export function parseMarkdownInto(
 					/*shouldMergeAdjacentLines*/ true
 				);
 			} catch (error) {
+				console.error('[lexical] markdown parse failed; falling back to plain text', error);
 				const root = $getRoot();
 				root.clear();
 				const paragraph = $createParagraphNode();
@@ -72,7 +69,6 @@ export function parseMarkdownInto(
 					paragraph.append($createTextNode(markdown));
 				}
 				root.append(paragraph);
-				onFallback?.(error);
 			}
 		},
 		{ discrete: true, tag: 'history-merge' }

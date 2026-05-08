@@ -4,7 +4,7 @@
 </script>
 
 <script lang="ts">
-	import WizardCore, { type WizardCoreState } from '$lib/components/wizard/WizardCore.svelte';
+	import WizardCore from '$lib/components/wizard/WizardCore.svelte';
 	import { isReservedFieldKey, schemaHasRenderableFormFields } from '$lib/utils/schema-utils';
 	import CardTypeSelector from './CardTypeSelector.svelte';
 	import { onMount } from 'svelte';
@@ -46,8 +46,6 @@
 		target,
 		store
 	}: Props = $props();
-
-	let wizardState = $state<WizardCoreState | undefined>(undefined);
 
 	/** Live frontmatter values for showWhen conditions. */
 	const parsedMetadata = $derived.by<Record<string, unknown>>(() => {
@@ -138,7 +136,6 @@
 		<WizardCore
 			{schema}
 			onDocumentChange={onChange}
-			bind:coreState={wizardState}
 			sectionTitle={title}
 			{parentData}
 			{target}
