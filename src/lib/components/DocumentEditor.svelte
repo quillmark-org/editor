@@ -27,8 +27,6 @@
 		previewDebounceMs?: number;
 		/** Called when the markdown changes (debounced via this component). */
 		onChange?: (markdown: string) => void;
-		/** Called when the user toggles between rich/advanced. */
-		onModeChange?: (mode: EditorMode) => void;
 		/** Called when the preview transitions success/failure. */
 		onPreviewStatusChange?: (success: boolean) => void;
 		/** Called when the user presses Mod-S. Default: no-op. */
@@ -47,7 +45,6 @@
 		showLineNumbers = false,
 		previewDebounceMs = 80,
 		onChange,
-		onModeChange,
 		onPreviewStatusChange,
 		onSave,
 		onError,
@@ -147,7 +144,6 @@
 	function setMode(next: EditorMode) {
 		if (next === mode) return;
 		mode = next;
-		onModeChange?.(next);
 	}
 
 	let visualEditorActiveCardId = $state<number | 'main' | null>(null);
@@ -171,16 +167,16 @@
 	const split = new ResizableSplit();
 	let splitContainerEl = $state<HTMLDivElement | null>(null);
 
-	const showEditor = $derived(layout !== 'preview-only');
-	const showPreview = $derived(layout !== 'editor-only');
-	const showSplit = $derived(layout === 'split');
-
-	const editorPaneStyle = $derived(showSplit ? `flex: 0 0 ${split.widthPercent}%;` : 'flex: 1 1 auto;');
-	const previewPaneStyle = $derived(showSplit ? `flex: 0 0 ${100 - split.widthPercent}%;` : 'flex: 1 1 auto;');
+	const editorPaneStyle = $derived(
+		layout === 'split' ? `flex: 0 0 ${split.widthPercent}%;` : 'flex: 1 1 auto;'
+	);
+	const previewPaneStyle = $derived(
+		layout === 'split' ? `flex: 0 0 ${100 - split.widthPercent}%;` : 'flex: 1 1 auto;'
+	);
 </script>
 
 <div class="qm-editor qm-document-editor {className}" bind:this={splitContainerEl}>
-	{#if showEditor}
+	{#if layout !== 'preview-only'}
 		<div class="qm-pane qm-editor-pane" style={editorPaneStyle}>
 			<div class="qm-editor-mode-bar">
 				<EditorModeSwitch
@@ -212,7 +208,7 @@
 		</div>
 	{/if}
 
-	{#if showSplit}
+	{#if layout === 'split'}
 		<div
 			class="qm-split-handle"
 			role="separator"
@@ -227,7 +223,7 @@
 		></div>
 	{/if}
 
-	{#if showPreview}
+	{#if layout !== 'editor-only'}
 		<div class="qm-pane qm-preview-pane" style={previewPaneStyle}>
 			<Preview
 				markdown={debouncedContent}

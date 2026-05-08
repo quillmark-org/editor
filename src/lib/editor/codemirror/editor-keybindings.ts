@@ -8,7 +8,7 @@ import type { Extension } from '@codemirror/state';
 /**
  * Options for creating the complete editor keymap
  */
-export interface EditorKeymapOptions {
+interface EditorKeymapOptions {
 	onBold?: () => void;
 	onItalic?: () => void;
 	onUnderline?: () => void;
@@ -22,7 +22,7 @@ export interface EditorKeymapOptions {
  * - Removes empty list items on second Enter
  * - Preserves indentation for regular lines
  */
-export function createListContinuationKeymap(): KeyBinding {
+function createListContinuationKeymap(): KeyBinding {
 	return {
 		key: 'Enter',
 		run: (view) => {
@@ -140,7 +140,7 @@ export function createListContinuationKeymap(): KeyBinding {
  * Creates keybindings for Tab indentation (2 spaces).
  * Handles both single cursor and multi-line selections.
  */
-export function createTabIndentKeymap(): KeyBinding {
+function createTabIndentKeymap(): KeyBinding {
 	return {
 		key: 'Tab',
 		run: (view) => {
@@ -174,7 +174,7 @@ export function createTabIndentKeymap(): KeyBinding {
  * Creates keybindings for Shift-Tab unindentation (remove up to 2 spaces).
  * Handles both single cursor and multi-line selections.
  */
-export function createShiftTabUnindentKeymap(): KeyBinding {
+function createShiftTabUnindentKeymap(): KeyBinding {
 	return {
 		key: 'Shift-Tab',
 		run: (view) => {
@@ -218,7 +218,7 @@ export function createShiftTabUnindentKeymap(): KeyBinding {
 /**
  * Creates keybindings for formatting shortcuts (Cmd/Ctrl + B, I, U).
  */
-export function createFormattingKeymaps(options: EditorKeymapOptions): KeyBinding[] {
+function createFormattingKeymaps(options: EditorKeymapOptions): KeyBinding[] {
 	const bindings: KeyBinding[] = [];
 
 	if (options.onBold) {
@@ -257,7 +257,7 @@ export function createFormattingKeymaps(options: EditorKeymapOptions): KeyBindin
 /**
  * Creates keybinding for toggling frontmatter fold (Cmd/Ctrl + .).
  */
-export function createToggleFrontmatterKeymap(onToggle?: () => void): KeyBinding | null {
+function createToggleFrontmatterKeymap(onToggle?: () => void): KeyBinding | null {
 	if (!onToggle) return null;
 
 	return {

@@ -3,9 +3,8 @@
 	 * BodyEditor - Reusable Lexical-based rich text editor component.
 	 * Used for both the primary document body and card bodies.
 	 *
-	 * Public surface (kept stable across the ProseMirror -> Lexical migration):
 	 *   props:   content, placeholder, onChange, onParseFallback
-	 *   exports: focus(), handleFormat(type), replaceRange(from, to, text)
+	 *   exports: focus(), handleFormat(type)
 	 */
 	import { onMount, onDestroy } from 'svelte';
 	import type { LexicalEditor } from 'lexical';
@@ -138,10 +137,6 @@
 
 	export function focus() {
 		editor?.focus();
-	}
-
-	export function replaceRange(_from: number, _to: number, _text: string) {
-		// Legacy ProseMirror-era no-op; kept for type contract during the spike.
 	}
 
 	export function handleFormat(type: string) {

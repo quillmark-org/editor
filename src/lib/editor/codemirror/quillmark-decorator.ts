@@ -26,13 +26,9 @@ import {
 import { foldMetadataBlockAtPosition } from './quillmark-fold-utils';
 
 /**
- * Widget for clickable opening delimiter that triggers folding
+ * Widget for clickable `---` delimiter that triggers folding
  */
-class FoldableDelimiterWidget extends WidgetType {
-	constructor(private lineNumber: number) {
-		super();
-	}
-
+class DelimiterFoldWidget extends WidgetType {
 	toDOM(view: EditorView): HTMLElement {
 		const span = document.createElement('span');
 		span.className = 'cm-quillmark-delimiter';
@@ -40,30 +36,7 @@ class FoldableDelimiterWidget extends WidgetType {
 		span.style.cursor = 'pointer';
 		span.onclick = (e) => {
 			e.preventDefault();
-			const pos = view.posAtDOM(span);
-			foldMetadataBlockAtPosition(view, pos);
-		};
-		return span;
-	}
-}
-
-/**
- * Widget for clickable closing delimiter that triggers folding
- */
-class ClosingDelimiterWidget extends WidgetType {
-	constructor(private lineNumber: number) {
-		super();
-	}
-
-	toDOM(view: EditorView): HTMLElement {
-		const span = document.createElement('span');
-		span.className = 'cm-quillmark-delimiter';
-		span.textContent = '---';
-		span.style.cursor = 'pointer';
-		span.onclick = (e) => {
-			e.preventDefault();
-			const pos = view.posAtDOM(span);
-			foldMetadataBlockAtPosition(view, pos);
+			foldMetadataBlockAtPosition(view, view.posAtDOM(span));
 		};
 		return span;
 	}
@@ -245,7 +218,7 @@ class QuillMarkDecorator {
 				from: openLine.from,
 				to: openLine.to,
 				decoration: Decoration.replace({
-					widget: new FoldableDelimiterWidget(openLine.number)
+					widget: new DelimiterFoldWidget()
 				}),
 				isLine: false
 			});
@@ -273,7 +246,7 @@ class QuillMarkDecorator {
 				from: closeLine.from,
 				to: closeLine.to,
 				decoration: Decoration.replace({
-					widget: new ClosingDelimiterWidget(closeLine.number)
+					widget: new DelimiterFoldWidget()
 				}),
 				isLine: false
 			});

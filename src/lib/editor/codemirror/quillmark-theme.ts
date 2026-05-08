@@ -2,38 +2,82 @@ import { EditorView } from '@codemirror/view';
 import type { Extension } from '@codemirror/state';
 
 /**
- * Creates a CodeMirror theme for QuillMark syntax highlighting.
- * Reads `--qm-*` CSS custom properties from the host element so locally
- * scoped overrides cascade in.
+ * Creates a CodeMirror theme combining built-in editor styling and QuillMark
+ * syntax highlighting. Reads `--qm-*` CSS custom properties from the host
+ * element so locally scoped overrides cascade in.
+ *
+ * Dark mode is detected by walking up to the nearest ancestor with the
+ * `qm-dark` class. If no ancestor has it, light mode is assumed.
  */
 export function createQuillmarkTheme(host: Element = document.documentElement): Extension {
 	const styles = getComputedStyle(host);
 	const isDark = host.closest?.('.qm-dark') != null;
 
-	const getCssVar = (name: string): string => styles.getPropertyValue(name).trim();
+	const v = (name: string, fallback = ''): string =>
+		(styles.getPropertyValue(name) || fallback).trim();
 
 	return EditorView.theme(
 		{
+			// ── Built-in CodeMirror selectors ───────────────────────────────
+			'&': {
+				height: '100%',
+				fontSize: '14px',
+				backgroundColor: v('--qm-background')
+			},
+			'.cm-scroller': {
+				overflow: 'auto',
+				fontFamily: v('--qm-font-mono', 'ui-monospace, monospace')
+			},
+			'.cm-content': {
+				padding: '8px 0',
+				color: v('--qm-foreground')
+			},
+			'.cm-line': {
+				padding: '0 8px'
+			},
+			'.cm-cursor, .cm-dropCursor': {
+				borderLeftColor: v('--qm-foreground')
+			},
+			'&.cm-focused .cm-cursor': {
+				borderLeftColor: v('--qm-foreground')
+			},
+			'.cm-activeLine': {
+				backgroundColor: v('--qm-surface')
+			},
+			'.cm-selectionBackground, .cm-focused .cm-selectionBackground': {
+				backgroundColor: v('--qm-brand')
+			},
+			'.cm-gutters': {
+				backgroundColor: v('--qm-background'),
+				color: v('--qm-muted-foreground'),
+				border: 'none'
+			},
+			'.cm-lineNumbers .cm-gutterElement': {
+				fontSize: '11px'
+			},
+
+			// ── QuillMark syntax highlighting ────────────────────────────────
+
 			// Metadata block delimiters (---)
 			'.cm-quillmark-delimiter': {
-				color: getCssVar('--qm-muted-foreground')
+				color: v('--qm-muted-foreground')
 			},
 
 			// Metadata block background and border
 			'.cm-quillmark-block': {
-				backgroundColor: getCssVar('--qm-syntax-metadata-bg'),
+				backgroundColor: v('--qm-syntax-metadata-bg'),
 				paddingLeft: '12px'
 			},
 
 			// Line containing fold placeholder
 			'.cm-line:has(.cm-foldPlaceholder)': {
-				backgroundColor: getCssVar('--qm-syntax-metadata-bg')
+				backgroundColor: v('--qm-syntax-metadata-bg')
 			},
 
 			// Fold placeholder (metadata) - wrapper
 			'.cm-foldPlaceholder': {
 				backgroundColor: 'transparent',
-				color: getCssVar('--qm-foreground'),
+				color: v('--qm-foreground'),
 				paddingLeft: '0px',
 				border: 'none',
 				display: 'inline-flex',
@@ -47,51 +91,51 @@ export function createQuillmarkTheme(host: Element = document.documentElement): 
 
 			// CARD and QUILL keywords
 			'.cm-quillmark-card-keyword, .cm-quillmark-quill-keyword': {
-				color: getCssVar('--qm-syntax-keyword'),
+				color: v('--qm-syntax-keyword'),
 				fontWeight: '600'
 			},
 
 			// Card/quill name values
 			'.cm-quillmark-card-name': {
-				color: getCssVar('--qm-foreground'),
+				color: v('--qm-foreground'),
 				fontWeight: '500'
 			},
 
 			// YAML keys
 			'.cm-quillmark-yaml-key': {
-				color: getCssVar('--qm-syntax-key')
+				color: v('--qm-syntax-key')
 			},
 
 			// YAML string values
 			'.cm-quillmark-yaml-string': {
-				color: getCssVar('--qm-foreground')
+				color: v('--qm-foreground')
 			},
 
 			// YAML number values
 			'.cm-quillmark-yaml-number': {
-				color: getCssVar('--qm-foreground')
+				color: v('--qm-foreground')
 			},
 
 			// YAML boolean values
 			'.cm-quillmark-yaml-bool': {
-				color: getCssVar('--qm-foreground')
+				color: v('--qm-foreground')
 			},
 
 			// YAML comments
 			'.cm-quillmark-yaml-comment': {
-				color: getCssVar('--qm-syntax-comment'),
+				color: v('--qm-syntax-comment'),
 				fontStyle: 'italic'
 			},
 
 			// YAML !fill tag - red color to draw attention
 			'.cm-quillmark-yaml-tag-fill': {
-				color: getCssVar('--qm-syntax-fill-tag'),
+				color: v('--qm-syntax-fill-tag'),
 				fontWeight: '500'
 			},
 
 			// YAML value for !fill tagged field - highlighted like placeholders
 			'.cm-quillmark-yaml-fill-value': {
-				backgroundColor: getCssVar('--qm-syntax-fill-value-bg'),
+				backgroundColor: v('--qm-syntax-fill-value-bg'),
 				borderRadius: '2px',
 				padding: '0 2px',
 				margin: '0 -2px'
@@ -99,7 +143,7 @@ export function createQuillmarkTheme(host: Element = document.documentElement): 
 
 			// Markdown bold delimiters (** or __)
 			'.cm-markdown-bold-delimiter': {
-				color: getCssVar('--qm-muted-foreground'),
+				color: v('--qm-muted-foreground'),
 				opacity: '0.6'
 			},
 
@@ -110,7 +154,7 @@ export function createQuillmarkTheme(host: Element = document.documentElement): 
 
 			// Markdown underline delimiters (<u>, </u>)
 			'.cm-markdown-underline-delimiter': {
-				color: getCssVar('--qm-muted-foreground'),
+				color: v('--qm-muted-foreground'),
 				opacity: '0.6'
 			},
 
@@ -121,7 +165,7 @@ export function createQuillmarkTheme(host: Element = document.documentElement): 
 
 			// Markdown italic delimiters (* or _)
 			'.cm-markdown-italic-delimiter': {
-				color: getCssVar('--qm-muted-foreground'),
+				color: v('--qm-muted-foreground'),
 				opacity: '0.6'
 			},
 
@@ -132,38 +176,38 @@ export function createQuillmarkTheme(host: Element = document.documentElement): 
 
 			// Markdown link text
 			'.cm-markdown-link-text': {
-				color: getCssVar('--qm-primary'),
+				color: v('--qm-primary'),
 				textDecoration: 'underline'
 			},
 
 			// Markdown link URL/reference
 			'.cm-markdown-link-url': {
-				color: getCssVar('--qm-muted-foreground'),
+				color: v('--qm-muted-foreground'),
 				opacity: '0.7'
 			},
 
 			// Markdown link brackets and parentheses
 			'.cm-markdown-link-bracket': {
-				color: getCssVar('--qm-muted-foreground'),
+				color: v('--qm-muted-foreground'),
 				opacity: '0.5'
 			},
 
 			// Markdown comment delimiters (<!-- and -->)
 			'.cm-markdown-comment-delimiter': {
-				color: getCssVar('--qm-syntax-comment'),
+				color: v('--qm-syntax-comment'),
 				opacity: '0.6'
 			},
 
 			// Markdown comment content
 			'.cm-markdown-comment-content': {
-				color: getCssVar('--qm-syntax-comment'),
+				color: v('--qm-syntax-comment'),
 				fontStyle: 'italic'
 			},
 
 			// Markdown placeholder wrapper (for click targeting)
 			'.cm-markdown-placeholder': {
 				cursor: 'pointer',
-				backgroundColor: getCssVar('--qm-placeholder-bg'),
+				backgroundColor: v('--qm-placeholder-bg'),
 				borderRadius: '2px',
 				padding: '0 2px',
 				margin: '0 -2px',
@@ -171,12 +215,12 @@ export function createQuillmarkTheme(host: Element = document.documentElement): 
 			},
 
 			'.cm-markdown-placeholder:hover': {
-				backgroundColor: getCssVar('--qm-placeholder-bg-active')
+				backgroundColor: v('--qm-placeholder-bg-active')
 			},
 
 			// Markdown placeholder delimiters ({: and :})
 			'.cm-markdown-placeholder-delimiter': {
-				color: getCssVar('--qm-placeholder-delimiter'),
+				color: v('--qm-placeholder-delimiter'),
 				fontFamily: 'var(--font-mono, monospace)'
 			},
 
@@ -193,7 +237,7 @@ export function createQuillmarkTheme(host: Element = document.documentElement): 
 				border: 'none',
 				borderRadius: '4px',
 				background: 'transparent',
-				color: getCssVar('--qm-muted-foreground'),
+				color: v('--qm-muted-foreground'),
 				cursor: 'pointer',
 				fontSize: '14px',
 				fontWeight: '500',
@@ -206,7 +250,7 @@ export function createQuillmarkTheme(host: Element = document.documentElement): 
 			},
 
 			'.cm-wizard-button:hover': {
-				color: getCssVar('--qm-foreground')
+				color: v('--qm-foreground')
 			}
 		},
 		{ dark: isDark }
