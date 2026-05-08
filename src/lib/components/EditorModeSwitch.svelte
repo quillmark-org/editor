@@ -5,16 +5,13 @@
 	interface Props {
 		mode: EditorMode;
 		onChange?: (mode: EditorMode) => void;
-		/** Backwards-compatible alias for `onChange`. */
-		onModeChange?: (mode: EditorMode) => void;
 	}
 
-	let { mode, onChange, onModeChange }: Props = $props();
+	let { mode, onChange }: Props = $props();
 
 	function toggle() {
 		const next: EditorMode = mode === 'rich' ? 'advanced' : 'rich';
 		onChange?.(next);
-		onModeChange?.(next);
 	}
 </script>
 

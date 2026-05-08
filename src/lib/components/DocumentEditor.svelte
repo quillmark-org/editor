@@ -5,7 +5,7 @@
 	import Preview from './Preview.svelte';
 	import EditorModeSwitch from './EditorModeSwitch.svelte';
 	import { ResizableSplit } from '$lib/editor/resizable-split.svelte';
-	import { setQuillmarkContext, tryGetQuillmarkContext } from '$lib/context.js';
+	import { setQuillmarkContext } from '$lib/context.js';
 	import type { QuillmarkBindings, EditorMode } from '$lib/types.js';
 
 	interface Props {
@@ -13,11 +13,8 @@
 		markdown?: string;
 		/** Editor mode — bound, two-way. */
 		mode?: EditorMode;
-		/**
-		 * The quillmark bindings. Optional: if absent, we read from Svelte
-		 * context (set higher in the tree via `setQuillmarkContext`).
-		 */
-		bindings?: QuillmarkBindings;
+		/** The quillmark bindings. Required. */
+		bindings: QuillmarkBindings;
 		/** Layout. `split` shows editor + preview; `editor-only` and
 		 *  `preview-only` show just one. */
 		layout?: 'split' | 'editor-only' | 'preview-only';
@@ -27,8 +24,6 @@
 		previewDebounceMs?: number;
 		/** Called when the markdown changes (debounced via this component). */
 		onChange?: (markdown: string) => void;
-		/** Called when the user toggles between rich/advanced. */
-		onModeChange?: (mode: EditorMode) => void;
 		/** Called when the preview transitions success/failure. */
 		onPreviewStatusChange?: (success: boolean) => void;
 		/** Called when the user presses Mod-S. Default: no-op. */
@@ -47,27 +42,17 @@
 		showLineNumbers = false,
 		previewDebounceMs = 80,
 		onChange,
-		onModeChange,
 		onPreviewStatusChange,
 		onSave,
 		onError,
 		class: className = ''
 	}: Props = $props();
 
-	// If a `bindings` prop was passed, install it on context for descendants.
-	// Captured once at mount — `bindings` is conceptually immutable per editor
-	// instance (consumer rebuilds the editor when swapping engines).
-	const initialBindings = bindings;
-	if (initialBindings) {
-		setQuillmarkContext(initialBindings);
-	}
-	const ctxFromContext = tryGetQuillmarkContext();
-	const ctx = initialBindings ?? ctxFromContext;
-	if (!ctx) {
-		throw new Error(
-			'@quillmark/editor: <DocumentEditor> requires either a `bindings` prop or a setQuillmarkContext() call in an ancestor.'
-		);
-	}
+	// Install bindings on context for descendants. Captured once at mount —
+	// `bindings` is conceptually immutable per editor instance (consumer
+	// rebuilds the editor when swapping engines).
+	const ctx = bindings;
+	setQuillmarkContext(ctx);
 
 	// Resolve the quill reference from the document and keep `resolvedQuillRef`
 	// up to date with whatever has been successfully ensured.
@@ -87,15 +72,10 @@
 
 	const parsedQuillName = $derived.by<string | null>(() => {
 		if (!debouncedContent || !ctx.isReady) return null;
-		let doc: import('@quillmark/wasm').Document | null = null;
-		try {
-			doc = ctx.parseDocument(debouncedContent);
-			return doc.quillRef || null;
-		} catch {
-			return null;
-		} finally {
-			doc?.free();
-		}
+		const fmMatch = debouncedContent.match(/^---[ \t]*\r?\n([\s\S]*?)^---[ \t]*$/m);
+		if (!fmMatch) return null;
+		const quillMatch = fmMatch[1].match(/^QUILL:[ \t]*(\S+)/m);
+		return quillMatch ? quillMatch[1] : null;
 	});
 
 	$effect(() => {
@@ -147,7 +127,6 @@
 	function setMode(next: EditorMode) {
 		if (next === mode) return;
 		mode = next;
-		onModeChange?.(next);
 	}
 
 	let visualEditorActiveCardId = $state<number | 'main' | null>(null);
@@ -171,16 +150,16 @@
 	const split = new ResizableSplit();
 	let splitContainerEl = $state<HTMLDivElement | null>(null);
 
-	const showEditor = $derived(layout !== 'preview-only');
-	const showPreview = $derived(layout !== 'editor-only');
-	const showSplit = $derived(layout === 'split');
-
-	const editorPaneStyle = $derived(showSplit ? `flex: 0 0 ${split.widthPercent}%;` : 'flex: 1 1 auto;');
-	const previewPaneStyle = $derived(showSplit ? `flex: 0 0 ${100 - split.widthPercent}%;` : 'flex: 1 1 auto;');
+	const editorPaneStyle = $derived(
+		layout === 'split' ? `flex: 0 0 ${split.widthPercent}%;` : 'flex: 1 1 auto;'
+	);
+	const previewPaneStyle = $derived(
+		layout === 'split' ? `flex: 0 0 ${100 - split.widthPercent}%;` : 'flex: 1 1 auto;'
+	);
 </script>
 
 <div class="qm-editor qm-document-editor {className}" bind:this={splitContainerEl}>
-	{#if showEditor}
+	{#if layout !== 'preview-only'}
 		<div class="qm-pane qm-editor-pane" style={editorPaneStyle}>
 			<div class="qm-editor-mode-bar">
 				<EditorModeSwitch
@@ -196,7 +175,6 @@
 							quillRef={resolvedQuillRef}
 							{cardTypes}
 							onDocumentChange={handleVisualChange}
-							onModeSwitch={() => setMode('advanced')}
 							activeCardId={visualEditorActiveCardId}
 							onActiveCardIdChange={(id) => (visualEditorActiveCardId = id)}
 						/>
@@ -212,7 +190,7 @@
 		</div>
 	{/if}
 
-	{#if showSplit}
+	{#if layout === 'split'}
 		<div
 			class="qm-split-handle"
 			role="separator"
@@ -227,7 +205,7 @@
 		></div>
 	{/if}
 
-	{#if showPreview}
+	{#if layout !== 'editor-only'}
 		<div class="qm-pane qm-preview-pane" style={previewPaneStyle}>
 			<Preview
 				markdown={debouncedContent}

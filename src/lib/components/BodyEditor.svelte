@@ -3,9 +3,8 @@
 	 * BodyEditor - Reusable Lexical-based rich text editor component.
 	 * Used for both the primary document body and card bodies.
 	 *
-	 * Public surface (kept stable across the ProseMirror -> Lexical migration):
-	 *   props:   content, placeholder, onChange, onParseFallback
-	 *   exports: focus(), handleFormat(type), replaceRange(from, to, text)
+	 *   props:   content, placeholder, onChange
+	 *   exports: focus(), handleFormat(type)
 	 */
 	import { onMount, onDestroy } from 'svelte';
 	import type { LexicalEditor } from 'lexical';
@@ -27,20 +26,9 @@
 		placeholder?: string;
 		/** Callback when content changes */
 		onChange: (content: string) => void;
-		/**
-		 * Called when the markdown parser falls back to plain text (structural
-		 * content lost). Lets parents surface a diagnostic so the user knows
-		 * their formatting was flattened.
-		 */
-		onParseFallback?: (error: unknown) => void;
 	}
 
-	let {
-		content,
-		placeholder = 'Enter content...',
-		onChange,
-		onParseFallback
-	}: Props = $props();
+	let { content, placeholder = 'Enter content...', onChange }: Props = $props();
 
 	let editorElement: HTMLDivElement | undefined = $state();
 	let containerElement: HTMLDivElement | undefined = $state();
@@ -82,7 +70,7 @@
 
 	function importContent(next: string) {
 		if (!editor) return;
-		parseMarkdownInto(editor, next ?? '', onParseFallback);
+		parseMarkdownInto(editor, next ?? '');
 		lastImportedContent = next ?? '';
 		isEmpty = isDocumentEmpty(editor);
 	}
@@ -138,10 +126,6 @@
 
 	export function focus() {
 		editor?.focus();
-	}
-
-	export function replaceRange(_from: number, _to: number, _text: string) {
-		// Legacy ProseMirror-era no-op; kept for type contract during the spike.
 	}
 
 	export function handleFormat(type: string) {
@@ -320,15 +304,5 @@
 	.lexical-container :global(.qm-table-cell-header) {
 		background: var(--qm-secondary);
 		font-weight: 600;
-	}
-
-	/* Inline metadata separator */
-	.lexical-container :global(.qm-inline-metadata) {
-		height: 2px;
-		margin: 0.5rem 0;
-		background: linear-gradient(90deg, transparent, var(--qm-border), transparent);
-		border-radius: 1px;
-		opacity: 0.6;
-		pointer-events: none;
 	}
 </style>

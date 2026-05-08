@@ -4,9 +4,14 @@ import type { QuillmarkBindings } from './types.js';
 const KEY = Symbol.for('@quillmark/editor:bindings');
 
 /**
- * Inject a {@link QuillmarkBindings} into Svelte context. Call from a
- * component that wraps the editor (e.g. a page-level `+layout.svelte` or
- * a wrapper component you own).
+ * Inject a {@link QuillmarkBindings} into Svelte context.
+ *
+ * Most consumers don't need this — pass `bindings` as a prop to
+ * `<DocumentEditor>` and it installs context for its descendants automatically.
+ *
+ * Call this directly only when mounting `<MarkdownEditor>`, `<VisualEditor>`,
+ * or `<Preview>` standalone (without an enclosing `<DocumentEditor>`); those
+ * components read bindings from context.
  */
 export function setQuillmarkContext(bindings: QuillmarkBindings): void {
 	setContext(KEY, bindings);
@@ -20,13 +25,8 @@ export function getQuillmarkContext(): QuillmarkBindings {
 	const value = getContext<QuillmarkBindings | undefined>(KEY);
 	if (!value) {
 		throw new Error(
-			'@quillmark/editor: no QuillmarkBindings on context. Call setQuillmarkContext(bindings) in an ancestor component, or pass `bindings` as a prop to <DocumentEditor>.'
+			'@quillmark/editor: no QuillmarkBindings on context. Pass `bindings` as a prop to <DocumentEditor>, or call setQuillmarkContext(bindings) in an ancestor when mounting <MarkdownEditor>/<VisualEditor>/<Preview> standalone.'
 		);
 	}
 	return value;
-}
-
-/** Same as `getQuillmarkContext` but returns `undefined` instead of throwing. */
-export function tryGetQuillmarkContext(): QuillmarkBindings | undefined {
-	return getContext<QuillmarkBindings | undefined>(KEY);
 }
