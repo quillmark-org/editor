@@ -47,7 +47,6 @@
 		/** Card-type tags accepted by this quill (`info.cardTypes`). */
 		cardTypes?: readonly string[];
 		onDocumentChange: (doc: string) => void;
-		onModeSwitch?: () => void;
 		/** Active card position (0-indexed) — owned by parent to survive remounts. `'main'` = primary doc. */
 		activeCardId?: number | 'main' | null;
 		onActiveCardIdChange?: (id: number | 'main' | null) => void;
@@ -58,8 +57,6 @@
 		quillRef,
 		cardTypes = [],
 		onDocumentChange,
-		// eslint-disable-next-line @typescript-eslint/no-unused-vars
-		onModeSwitch,
 		activeCardId = null,
 		onActiveCardIdChange
 	}: Props = $props();
@@ -115,18 +112,8 @@
 	let lastEmittedDocument: string | null = null;
 
 	let bannerDismissed = $state(false);
-	/**
-	 * Set when a `BodyEditor` parser fell back to plain text on its initial
-	 * load — meaning structural markdown (headings, lists, tables) was
-	 * flattened. Surfaced in the same banner as parse diagnostics so the
-	 * user knows their formatting will be lost on next save.
-	 */
-	let bodyParseFallback = $state<string | null>(null);
-	function handleBodyParseFallback(err: unknown) {
-		bodyParseFallback = err instanceof Error ? err.message : String(err);
-	}
 	$effect(() => {
-		if (editorStore.diagnostics.length > 0 || bodyParseFallback) {
+		if (editorStore.diagnostics.length > 0) {
 			bannerDismissed = false;
 		}
 	});
@@ -282,12 +269,9 @@
 	role="application"
 	aria-label="Rich text editor"
 >
-	{#if (editorStore.diagnostics.length > 0 || bodyParseFallback) && !bannerDismissed}
+	{#if editorStore.diagnostics.length > 0 && !bannerDismissed}
 		<div class="flex items-start gap-2 bg-destructive/10 border border-destructive/30 text-destructive text-sm px-4 py-2 shrink-0">
 			<div class="flex-1 min-w-0">
-				{#if bodyParseFallback}
-					<div class="truncate"><span class="font-medium">Formatting flattened:</span> body content couldn't be parsed and was loaded as plain text. Saving will discard the original structure.</div>
-				{/if}
 				{#each editorStore.diagnostics as diag (diag.message)}
 					<div class="truncate"><span class="font-medium capitalize">{diag.severity}:</span> {diag.message}</div>
 				{/each}
@@ -296,7 +280,7 @@
 				type="button"
 				class="shrink-0 ml-2 opacity-70 hover:opacity-100"
 				aria-label="Dismiss parse warnings"
-				onclick={() => { bannerDismissed = true; bodyParseFallback = null; }}
+				onclick={() => { bannerDismissed = true; }}
 			>&#x2715;</button>
 		</div>
 	{/if}
@@ -325,7 +309,6 @@
 						content={mainBody}
 						placeholder={PLACEHOLDER_BODY}
 						onChange={handlePrimaryBodyChange}
-						onParseFallback={handleBodyParseFallback}
 					/>
 				{/if}
 			</EditorBlock>
@@ -373,7 +356,6 @@
 										content={card.body}
 										placeholder={PLACEHOLDER_BODY}
 										onChange={(newBody) => handleCardBodyChange(index, newBody)}
-										onParseFallback={handleBodyParseFallback}
 									/>
 								{/if}
 							</div>

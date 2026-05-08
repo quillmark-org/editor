@@ -79,12 +79,3 @@ export interface QuillmarkBindings {
 }
 
 export type EditorMode = 'rich' | 'advanced';
-
-export type EditorTarget = { kind: 'main' } | { kind: 'card'; id: number };
-
-export interface CardView {
-	id: number;
-	tag: string;
-	body: string;
-	fields: Record<string, unknown>;
-}

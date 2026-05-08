@@ -2,16 +2,8 @@
 	import { onMount, onDestroy } from 'svelte';
 	import { EditorView, keymap, lineNumbers } from '@codemirror/view';
 	import * as CMState from '@codemirror/state';
-	type StateEffectInstance = CMState.StateEffect<unknown>;
 	import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
-	import {
-		foldKeymap,
-		foldState,
-		codeFolding,
-		foldedRanges,
-		unfoldEffect
-	} from '@codemirror/language';
-	import { createEditorTheme } from '$lib/utils/editor-theme';
+	import { foldKeymap, foldState, codeFolding, foldedRanges } from '@codemirror/language';
 	import {
 		quillmarkDecorator,
 		createQuillmarkTheme,
@@ -25,21 +17,17 @@
 		value: string;
 		onChange: (value: string) => void;
 		showLineNumbers?: boolean;
-		/** Unique identifier for the document, used to reset state when switching documents */
-		id?: string | null;
 	}
 
 	let {
 		value,
 		onChange,
-		showLineNumbers = false,
-		id = null
+		showLineNumbers = false
 	}: Props = $props();
 
 	let editorElement: HTMLDivElement | undefined = $state();
 	let editorView: EditorView | null = null;
 	let isDarkTheme = $state(false);
-	let lastDocId: string | null = null;
 
 
 
@@ -65,7 +53,6 @@
 				}
 			}),
 			EditorView.lineWrapping,
-			createEditorTheme(),
 			quillmarkDecorator,
 			createQuillmarkTheme(),
 			quillmarkFoldService,
@@ -219,147 +206,6 @@
 		applyFormatting('<u>', '</u>');
 	}
 
-	function handleStrikethrough() {
-		applyFormatting('~~');
-	}
-
-	function handleInlineCode() {
-		applyFormatting('`');
-	}
-
-	function handleQuote() {
-		const state = editorView?.state;
-		if (!state) return;
-
-		const selection = state.selection.main;
-		const line = state.doc.lineAt(selection.from);
-		const lineText = line.text;
-
-		if (lineText.startsWith('> ')) {
-			// Remove quote
-			const transaction = state.update({
-				changes: {
-					from: line.from,
-					to: line.from + 2,
-					insert: ''
-				}
-			});
-			editorView?.dispatch(transaction);
-		} else {
-			// Add quote
-			const transaction = state.update({
-				changes: {
-					from: line.from,
-					insert: '> '
-				}
-			});
-			editorView?.dispatch(transaction);
-		}
-		editorView?.focus();
-	}
-
-	function handleToggleFrontmatter() {
-		if (!editorView) return;
-		toggleAllMetadataBlocks(editorView);
-	}
-
-	function handleFoldFrontmatter() {
-		if (!editorView) return;
-		foldAllMetadataBlocks(editorView);
-	}
-
-	function handleBulletList() {
-		const state = editorView?.state;
-		if (!state) return;
-
-		const selection = state.selection.main;
-		const line = state.doc.lineAt(selection.from);
-		const lineText = line.text;
-
-		if (lineText.startsWith('- ')) {
-			// Remove bullet
-			const transaction = state.update({
-				changes: {
-					from: line.from,
-					to: line.from + 2,
-					insert: ''
-				}
-			});
-			editorView?.dispatch(transaction);
-		} else {
-			// Add bullet
-			const transaction = state.update({
-				changes: {
-					from: line.from,
-					insert: '- '
-				}
-			});
-			editorView?.dispatch(transaction);
-		}
-		editorView?.focus();
-	}
-
-	function handleNumberedList() {
-		const state = editorView?.state;
-		if (!state) return;
-
-		const selection = state.selection.main;
-		const line = state.doc.lineAt(selection.from);
-
-		// Add numbered list
-		const transaction = state.update({
-			changes: {
-				from: line.from,
-				insert: '1. '
-			}
-		});
-		editorView?.dispatch(transaction);
-		editorView?.focus();
-	}
-
-	function handleLink() {
-		applyFormatting('[', '](url)');
-	}
-
-	// Expose handleFormat method for external toolbar
-	export function handleFormat(type: string) {
-		switch (type) {
-			case 'bold':
-				handleBold();
-				break;
-			case 'italic':
-				handleItalic();
-				break;
-			case 'underline':
-				handleUnderline();
-				break;
-			case 'strikethrough':
-				handleStrikethrough();
-				break;
-			case 'code':
-				handleInlineCode();
-				break;
-			case 'quote':
-				handleQuote();
-				break;
-			case 'bulletList':
-				handleBulletList();
-				break;
-			case 'numberedList':
-				handleNumberedList();
-				break;
-			case 'link':
-				handleLink();
-				break;
-			case 'toggleFrontmatter':
-				handleToggleFrontmatter();
-				break;
-			case 'foldFrontmatter':
-				handleFoldFrontmatter();
-				break;
-		}
-	}
-
 	onMount(() => {
 		// Detect initial theme
 		isDarkTheme = document.documentElement.classList.contains('dark');
@@ -396,25 +242,12 @@
 	// Update editor when value changes externally
 	$effect(() => {
 		if (editorView && editorView.state.doc.toString() !== value) {
-			const effects: StateEffectInstance[] = [];
+			// Check if frontmatter is currently folded so we can restore it
+			const folded = foldedRanges(editorView.state);
 			let shouldRefold = false;
-
-			// Clear all existing folds only if the document ID has changed
-			// This prevents folds from being lost when the document is updated (e.g. via Wizard)
-			if (id !== lastDocId) {
-				const folded = foldedRanges(editorView.state);
-				folded.between(0, editorView.state.doc.length, (from, to) => {
-					effects.push(unfoldEffect.of({ from, to }));
-				});
-				lastDocId = id;
-			} else {
-				// Check if frontmatter is currently folded so we can restore it
-				const folded = foldedRanges(editorView.state);
-				// Check for any fold starting in the first few characters (frontmatter)
-				folded.between(0, 10, () => {
-					shouldRefold = true;
-				});
-			}
+			folded.between(0, 10, () => {
+				shouldRefold = true;
+			});
 
 			// Dispatch content replacement with scroll preservation
 			editorView.dispatch({
@@ -423,7 +256,6 @@
 					to: editorView.state.doc.length,
 					insert: value
 				},
-				effects,
 				scrollIntoView: true
 			});
 

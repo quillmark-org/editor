@@ -1,17 +1,7 @@
-<script lang="ts" module>
-	export interface WizardCoreState {
-		formData: Record<string, unknown>;
-		dirtyFields: Set<string>;
-		originalData: Record<string, unknown>;
-		handleFieldDirty: (field: string) => void;
-	}
-</script>
-
 <script lang="ts">
 	import SchemaForm from './SchemaForm.svelte';
 	import { getSchemaDefaults } from '$lib/utils/card-schema-utils';
 	import { isReservedFieldKey } from '$lib/utils/schema-utils';
-	import type { Snippet } from 'svelte';
 	import type { FormSchema } from '$lib/types.js';
 	import type { EditorStateStore, EditorTarget } from '$lib/editor/editorState.svelte';
 
@@ -28,8 +18,6 @@
 		onDocumentChange?: () => void;
 		debounceMs?: number;
 		startCollapsed?: boolean;
-		coreState?: WizardCoreState;
-		children?: Snippet<[WizardCoreState]>;
 		sectionTitle?: string;
 		parentData?: Record<string, unknown>;
 		target: EditorTarget;
@@ -41,8 +29,6 @@
 		onDocumentChange,
 		debounceMs = 50,
 		startCollapsed = true,
-		coreState = $bindable(),
-		children,
 		sectionTitle,
 		parentData,
 		target,
@@ -51,7 +37,6 @@
 
 	// Form state
 	let formData = $state<Record<string, unknown>>({});
-	let originalData = $state<Record<string, unknown>>({});
 	let dirtyFields = $state(new Set<string>());
 
 	// Reactive frontmatter snapshot pulled from the store.
@@ -88,7 +73,6 @@
 		}
 
 		formData = structuredClone(normalizedData);
-		originalData = structuredClone(normalizedData);
 
 		if (schema) {
 			const defaults = getSchemaDefaults(schema);
@@ -105,15 +89,6 @@
 	function handleFieldDirty(field: string) {
 		dirtyFields = new Set([...dirtyFields, field]);
 	}
-
-	$effect.pre(() => {
-		coreState = {
-			formData,
-			dirtyFields,
-			originalData,
-			handleFieldDirty
-		};
-	});
 
 	// Debounced effect to flush dirty fields back into the store
 	let changeTimer: ReturnType<typeof setTimeout> | undefined;
@@ -145,12 +120,9 @@
 			changeTimer = undefined;
 		};
 	});
-
 </script>
 
-{#if children}
-	{@render children({ formData, dirtyFields, originalData, handleFieldDirty })}
-{:else if schema}
+{#if schema}
 	<SchemaForm
 		{schema}
 		bind:data={formData}
