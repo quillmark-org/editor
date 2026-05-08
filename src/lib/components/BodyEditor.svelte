@@ -44,13 +44,14 @@
 
 	let editorElement: HTMLDivElement | undefined = $state();
 	let containerElement: HTMLDivElement | undefined = $state();
-	let editor: LexicalEditor | null = $state(null);
-	let editorDispose: (() => void) | null = null;
-	let initializedWithContent = $state(false);
 	let isEmpty = $state(true);
+
+	// Non-reactive: the editor handle and tracking state are imperative — exposing
+	// them as $state was the source of a Svelte 5 reactivity loop.
+	let editor: LexicalEditor | null = null;
+	let editorDispose: (() => void) | null = null;
 	let onChangeDebounceTimer: ReturnType<typeof setTimeout> | null = null;
-	let suppressNextChange = false; // guard against echoing import back as a change
-	let lastEmittedMarkdown: string | null = null;
+	let lastImportedContent: string | null = null;
 
 	function cancelPendingChange() {
 		if (onChangeDebounceTimer) {
@@ -66,68 +67,8 @@
 			if (children.length === 0) return true;
 			if (children.length > 1) return false;
 			const first = children[0];
-			// A single empty paragraph counts as "empty" for placeholder purposes.
 			return first.getType() === 'paragraph' && first.getTextContent().length === 0;
 		});
-	}
-
-	function initializeEditor(container: HTMLElement, initialContent: string) {
-		if (editorDispose) {
-			cancelPendingChange();
-			editorDispose();
-			editorDispose = null;
-			editor = null;
-		}
-
-		const bundle = createQuillmarkEditor({
-			onError: (err) => console.error('[BodyEditor] lexical error', err)
-		});
-		editor = bundle.editor;
-		editorDispose = bundle.dispose;
-
-		editor.setRootElement(container);
-
-		// Import the initial markdown. The editor.update inside parseMarkdownInto
-		// fires our update listener — guard against treating the import as a
-		// user-driven change.
-		suppressNextChange = true;
-		parseMarkdownInto(editor, initialContent ?? '', onParseFallback);
-		lastEmittedMarkdown = initialContent ?? '';
-		isEmpty = isDocumentEmpty(editor);
-
-		const unregister = editor.registerUpdateListener(({ dirtyElements, dirtyLeaves }) => {
-			if (suppressNextChange) {
-				suppressNextChange = false;
-				return;
-			}
-			// Skip pure selection changes — they don't mutate any node.
-			const docChanged = dirtyElements.size > 0 || dirtyLeaves.size > 0;
-			if (!docChanged) return;
-			if (!editor) return;
-
-			isEmpty = isDocumentEmpty(editor);
-
-			cancelPendingChange();
-			onChangeDebounceTimer = setTimeout(() => {
-				if (!editor) return;
-				const md = serializeMarkdownSafe(editor);
-				if (md === lastEmittedMarkdown) return;
-				lastEmittedMarkdown = md;
-				onChange(md);
-				initializedWithContent = true;
-			}, 100);
-		});
-
-		// Save the listener teardown so dispose cleans it up too.
-		const prevDispose = editorDispose;
-		editorDispose = () => {
-			try {
-				unregister();
-			} catch {
-				/* noop */
-			}
-			prevDispose?.();
-		};
 	}
 
 	function serializeMarkdownSafe(view: LexicalEditor): string {
@@ -135,29 +76,61 @@
 			return view.getEditorState().read(() => serializeToMarkdown());
 		} catch (err) {
 			console.error('[BodyEditor] failed to serialize', err);
-			return lastEmittedMarkdown ?? '';
+			return lastImportedContent ?? '';
 		}
 	}
 
+	function importContent(next: string) {
+		if (!editor) return;
+		parseMarkdownInto(editor, next ?? '', onParseFallback);
+		lastImportedContent = next ?? '';
+		isEmpty = isDocumentEmpty(editor);
+	}
+
 	onMount(() => {
-		if (editorElement) {
-			initializeEditor(editorElement, content);
-			if (content) initializedWithContent = true;
-		}
+		if (!editorElement) return;
+		const bundle = createQuillmarkEditor({
+			onError: (err) => console.error('[BodyEditor] lexical error', err)
+		});
+		editor = bundle.editor;
+		editorDispose = bundle.dispose;
+		editor.setRootElement(editorElement);
+		importContent(content ?? '');
+
+		const unregister = editor.registerUpdateListener(({ dirtyElements, dirtyLeaves }) => {
+			const docChanged = dirtyElements.size > 0 || dirtyLeaves.size > 0;
+			if (!docChanged || !editor) return;
+			isEmpty = isDocumentEmpty(editor);
+
+			cancelPendingChange();
+			onChangeDebounceTimer = setTimeout(() => {
+				if (!editor) return;
+				const md = serializeMarkdownSafe(editor);
+				if (md === lastImportedContent) return;
+				lastImportedContent = md;
+				onChange(md);
+			}, 100);
+		});
+
+		const prevDispose = editorDispose;
+		editorDispose = () => {
+			try { unregister(); } catch { /* noop */ }
+			prevDispose?.();
+		};
 	});
 
+	// Re-import when the content prop changes from outside (and isn't just
+	// our own emission echoing back).
 	$effect(() => {
-		if (editorElement && content && !initializedWithContent) {
-			initializeEditor(editorElement, content);
-			initializedWithContent = true;
-		}
+		const next = content ?? '';
+		if (!editor) return;
+		if (next === lastImportedContent) return;
+		importContent(next);
 	});
 
 	onDestroy(() => {
 		cancelPendingChange();
-		if (editor) {
-			editor.setRootElement(null);
-		}
+		if (editor) editor.setRootElement(null);
 		editorDispose?.();
 		editorDispose = null;
 		editor = null;
@@ -167,14 +140,8 @@
 		editor?.focus();
 	}
 
-	/**
-	 * Legacy export from the ProseMirror-era component. Lexical doesn't expose
-	 * an integer-position model that maps cleanly to the old API, and no
-	 * production caller currently invokes this — kept as a no-op stub so the
-	 * type contract is preserved during the spike.
-	 */
 	export function replaceRange(_from: number, _to: number, _text: string) {
-		// Intentionally empty — see comment above.
+		// Legacy ProseMirror-era no-op; kept for type contract during the spike.
 	}
 
 	export function handleFormat(type: string) {
