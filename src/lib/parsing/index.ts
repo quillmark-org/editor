@@ -2,7 +2,8 @@
  * Centralized Parsing Library
  *
  * Surviving helpers for the @quillmark/wasm-based editor:
- * - Fenced-code patterns (used by the CodeMirror folding plugin)
+ * - Fenced-code patterns (used to skip `---` markers inside code blocks
+ *   when detecting metadata-block boundaries)
  *
  * @module $lib/parsing
  */

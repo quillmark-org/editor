@@ -3,15 +3,10 @@
 	import { EditorView, keymap, lineNumbers } from '@codemirror/view';
 	import * as CMState from '@codemirror/state';
 	import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
-	import { foldKeymap, foldState, codeFolding, foldedRanges } from '@codemirror/language';
 	import {
 		quillmarkDecorator,
 		createQuillmarkTheme,
-		quillmarkFoldService,
-		foldAllMetadataBlocks,
-		toggleAllMetadataBlocks,
-		createEditorKeymaps,
-		placeholderClickHandler
+		createEditorKeymaps
 	} from '$lib/editor/codemirror';
 	interface Props {
 		value: string;
@@ -38,15 +33,9 @@
 			// Custom keybindings from editor-keybindings module (MUST come before defaultKeymap)
 			createEditorKeymaps({
 				onBold: handleBold,
-				onItalic: handleItalic,
-				onUnderline: handleUnderline,
-				onToggleFrontmatter: () => editorView && toggleAllMetadataBlocks(editorView)
+				onItalic: handleItalic
 			}),
-			keymap.of([
-				...defaultKeymap,
-				...historyKeymap,
-				...foldKeymap
-			]),
+			keymap.of([...defaultKeymap, ...historyKeymap]),
 			EditorView.updateListener.of((update) => {
 				if (update.docChanged) {
 					onChange(update.state.doc.toString());
@@ -54,83 +43,7 @@
 			}),
 			EditorView.lineWrapping,
 			quillmarkDecorator,
-			createQuillmarkTheme(),
-			quillmarkFoldService,
-			foldState,
-			codeFolding({
-				preparePlaceholder: (_state, range) => range,
-				placeholderDOM: (view, onclick, prepared) => {
-					const wrapper = document.createElement('span');
-					wrapper.className = 'cm-foldPlaceholder';
-					wrapper.onclick = onclick;
-
-					const foldedText = view.state.doc.sliceString(prepared.from, prepared.to);
-					const contentLines = foldedText
-						.trim()
-						.split('\n')
-						.filter((line) => line.trim() !== '---');
-					const firstLine = contentLines[0] || '';
-
-					// Create text span for the placeholder text
-					const textSpan = document.createElement('span');
-					textSpan.className = 'cm-foldPlaceholder-text';
-
-					if (firstLine) {
-						// Try to parse key-value pair to colorize the key
-						const colonIndex = firstLine.indexOf(':');
-						if (colonIndex !== -1) {
-							const key = firstLine.substring(0, colonIndex);
-							const value = firstLine.substring(colonIndex);
-
-							const delimiterSpan = document.createElement('span');
-							delimiterSpan.className = 'cm-quillmark-delimiter';
-							delimiterSpan.textContent = '--- ';
-							textSpan.appendChild(delimiterSpan);
-
-							const keySpan = document.createElement('span');
-							keySpan.className = 'cm-quillmark-yaml-key';
-							// Bold if key is all caps
-							if (key === key.toUpperCase() && key !== key.toLowerCase()) {
-								keySpan.style.fontWeight = 'bold';
-							}
-							keySpan.textContent = key;
-							textSpan.appendChild(keySpan);
-
-							const valueSpan = document.createElement('span');
-							valueSpan.textContent = value + ' ';
-							textSpan.appendChild(valueSpan);
-
-							const endDelimiterSpan = document.createElement('span');
-							endDelimiterSpan.className = 'cm-quillmark-delimiter';
-							endDelimiterSpan.textContent = '---';
-							textSpan.appendChild(endDelimiterSpan);
-						} else {
-							const delimiterSpan = document.createElement('span');
-							delimiterSpan.className = 'cm-quillmark-delimiter';
-							delimiterSpan.textContent = '--- ';
-							textSpan.appendChild(delimiterSpan);
-
-							const contentSpan = document.createElement('span');
-							contentSpan.textContent = firstLine + ' ';
-							textSpan.appendChild(contentSpan);
-
-							const endDelimiterSpan = document.createElement('span');
-							endDelimiterSpan.className = 'cm-quillmark-delimiter';
-							endDelimiterSpan.textContent = '---';
-							textSpan.appendChild(endDelimiterSpan);
-						}
-					} else {
-						const delimiterSpan = document.createElement('span');
-						delimiterSpan.className = 'cm-quillmark-delimiter';
-						delimiterSpan.textContent = '--- ---';
-						textSpan.appendChild(delimiterSpan);
-					}
-					wrapper.appendChild(textSpan);
-
-					return wrapper;
-				}
-			}),
-			placeholderClickHandler
+			createQuillmarkTheme()
 		];
 
 		// Conditionally add line numbers
@@ -202,10 +115,6 @@
 		applyFormatting('*');
 	}
 
-	function handleUnderline() {
-		applyFormatting('<u>', '</u>');
-	}
-
 	onMount(() => {
 		// Detect initial theme
 		isDarkTheme = document.documentElement.classList.contains('dark');
@@ -242,14 +151,6 @@
 	// Update editor when value changes externally
 	$effect(() => {
 		if (editorView && editorView.state.doc.toString() !== value) {
-			// Check if frontmatter is currently folded so we can restore it
-			const folded = foldedRanges(editorView.state);
-			let shouldRefold = false;
-			folded.between(0, 10, () => {
-				shouldRefold = true;
-			});
-
-			// Dispatch content replacement with scroll preservation
 			editorView.dispatch({
 				changes: {
 					from: 0,
@@ -258,13 +159,6 @@
 				},
 				scrollIntoView: true
 			});
-
-			// Restore folds after render to prevent scroll jump
-			if (shouldRefold) {
-				requestAnimationFrame(() => {
-					if (editorView) foldAllMetadataBlocks(editorView);
-				});
-			}
 		}
 	});
 

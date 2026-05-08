@@ -259,7 +259,6 @@
 	}
 
 	export function handleFormat(type: string) {
-		if (type === 'foldFrontmatter') return;
 		primaryBodyEditor?.handleFormat(type);
 	}
 </script>
