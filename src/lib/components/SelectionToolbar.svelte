@@ -103,12 +103,18 @@
 	}
 
 	/**
-	 * Check if a table CellSelection is active (rows/columns selected via drag handles).
-	 * prosemirror-tables adds .selectedCell to each cell in a CellSelection.
+	 * Check if a table cell-selection is active. Both the legacy
+	 * prosemirror-tables and the current Lexical table observer mark the
+	 * selected cells with the `.selected` / `.selectedCell` class — this
+	 * helper covers both so cell drag-selection still suppresses the floating
+	 * formatting pill.
 	 */
 	function isCellSelectionActive(): boolean {
 		if (!containerElement) return false;
-		return containerElement.querySelector('.selectedCell') !== null;
+		return (
+			containerElement.querySelector('.selectedCell') !== null ||
+			containerElement.querySelector('td.selected,th.selected') !== null
+		);
 	}
 
 	/**
