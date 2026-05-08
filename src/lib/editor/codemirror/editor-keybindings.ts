@@ -11,8 +11,6 @@ import type { Extension } from '@codemirror/state';
 interface EditorKeymapOptions {
 	onBold?: () => void;
 	onItalic?: () => void;
-	onUnderline?: () => void;
-	onToggleFrontmatter?: () => void;
 }
 
 /**
@@ -216,7 +214,7 @@ function createShiftTabUnindentKeymap(): KeyBinding {
 }
 
 /**
- * Creates keybindings for formatting shortcuts (Cmd/Ctrl + B, I, U).
+ * Creates keybindings for formatting shortcuts (Cmd/Ctrl + B, I).
  */
 function createFormattingKeymaps(options: EditorKeymapOptions): KeyBinding[] {
 	const bindings: KeyBinding[] = [];
@@ -241,32 +239,7 @@ function createFormattingKeymaps(options: EditorKeymapOptions): KeyBinding[] {
 		});
 	}
 
-	if (options.onUnderline) {
-		bindings.push({
-			key: 'Mod-u',
-			run: () => {
-				options.onUnderline!();
-				return true;
-			}
-		});
-	}
-
 	return bindings;
-}
-
-/**
- * Creates keybinding for toggling frontmatter fold (Cmd/Ctrl + .).
- */
-function createToggleFrontmatterKeymap(onToggle?: () => void): KeyBinding | null {
-	if (!onToggle) return null;
-
-	return {
-		key: 'Mod-.',
-		run: () => {
-			onToggle();
-			return true;
-		}
-	};
 }
 
 /**
@@ -274,15 +247,10 @@ function createToggleFrontmatterKeymap(onToggle?: () => void): KeyBinding | null
  * This should be placed BEFORE defaultKeymap in the extension list to take priority.
  */
 export function createEditorKeymaps(options: EditorKeymapOptions = {}): Extension {
-	const bindings: KeyBinding[] = [
+	return keymap.of([
 		createListContinuationKeymap(),
 		createTabIndentKeymap(),
 		createShiftTabUnindentKeymap(),
 		...createFormattingKeymaps(options)
-	];
-
-	const toggleBinding = createToggleFrontmatterKeymap(options.onToggleFrontmatter);
-	if (toggleBinding) bindings.push(toggleBinding);
-
-	return keymap.of(bindings);
+	]);
 }
