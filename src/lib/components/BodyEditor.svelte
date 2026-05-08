@@ -1,34 +1,24 @@
 <script lang="ts">
 	/**
-	 * BodyEditor - Reusable ProseMirror-based rich text editor component.
-	 * Used for both primary document body and card bodies.
+	 * BodyEditor - Reusable Lexical-based rich text editor component.
+	 * Used for both the primary document body and card bodies.
+	 *
+	 * Public surface (kept stable across the ProseMirror -> Lexical migration):
+	 *   props:   content, placeholder, onChange, onParseFallback
+	 *   exports: focus(), handleFormat(type), replaceRange(from, to, text)
 	 */
 	import { onMount, onDestroy } from 'svelte';
-	import { EditorState } from 'prosemirror-state';
-	import { EditorView } from 'prosemirror-view';
-	import { history } from 'prosemirror-history';
-	import { dropCursor } from 'prosemirror-dropcursor';
-	import { gapCursor } from 'prosemirror-gapcursor';
-	import type { Node } from 'prosemirror-model';
-	import { toggleMark } from 'prosemirror-commands';
-	import { tableEditing, fixTables } from 'prosemirror-tables';
+	import type { LexicalEditor } from 'lexical';
+	import { $getRoot as getRoot } from 'lexical';
 	import SelectionToolbar from './SelectionToolbar.svelte';
-	import TableControls from './TableControls.svelte';
 
 	import {
-		quillmarkSchema,
-		parseMarkdown,
-		serializeMarkdown,
-		createQuillmarkKeymap,
-		baseKeymap,
-		createQuillmarkInputRules,
-		isInTable,
-		findTable,
-		insertTable,
-		toggleBulletList,
-		toggleOrderedList
-	} from '$lib/editor/prosemirror';
-	import { keymap } from 'prosemirror-keymap';
+		createQuillmarkEditor,
+		parseMarkdownInto,
+		$serializeToMarkdown as serializeToMarkdown,
+		applyFormat,
+		type FormatType
+	} from '$lib/editor/lexical';
 
 	interface Props {
 		/** Markdown content to edit */
@@ -52,95 +42,15 @@
 		onParseFallback
 	}: Props = $props();
 
-	// Editor state
 	let editorElement: HTMLDivElement | undefined = $state();
 	let containerElement: HTMLDivElement | undefined = $state();
-	let editorView: EditorView | null = $state(null);
+	let editor: LexicalEditor | null = $state(null);
+	let editorDispose: (() => void) | null = null;
 	let initializedWithContent = $state(false);
 	let isEmpty = $state(true);
 	let onChangeDebounceTimer: ReturnType<typeof setTimeout> | null = null;
-
-	// Table state tracking
-	let tableElement: HTMLElement | null = $state(null);
-
-	/**
-	 * Check if a ProseMirror document is truly empty.
-	 * A document is considered empty only if it contains a single empty paragraph.
-	 * Any structural content (lists, headings, etc.) or text makes it non-empty.
-	 */
-	function isDocumentEmpty(doc: Node): boolean {
-		// If there's any text content, it's not empty
-		if (doc.textContent.length > 0) {
-			return false;
-		}
-
-		// Check if document has only one child (should be a paragraph for empty state)
-		if (doc.childCount !== 1) {
-			return false;
-		}
-
-		const firstChild = doc.firstChild;
-		if (!firstChild) {
-			return true;
-		}
-
-		// If the first child is not a paragraph, document is not empty
-		// (e.g., it could be a bullet_list, ordered_list, heading, etc.)
-		if (firstChild.type.name !== 'paragraph') {
-			return false;
-		}
-
-		// If the paragraph has any content (even empty text nodes from structure), check more carefully
-		// An empty paragraph should have childCount of 0
-		return firstChild.childCount === 0;
-	}
-
-	/**
-	 * Handle format commands from the SelectionToolbar
-	 */
-	function handleSelectionFormat(type: string) {
-		if (!editorView) return;
-
-		const { state, dispatch } = editorView;
-		const { marks } = quillmarkSchema;
-
-		switch (type) {
-			case 'bold':
-				toggleMark(marks.strong)(state, dispatch);
-				break;
-			case 'italic':
-				toggleMark(marks.em)(state, dispatch);
-				break;
-			case 'underline':
-				toggleMark(marks.underline)(state, dispatch);
-				break;
-			case 'strikethrough':
-				if (marks.strikethrough) {
-					toggleMark(marks.strikethrough)(state, dispatch);
-				}
-				break;
-			case 'code':
-				toggleMark(marks.code)(state, dispatch);
-				break;
-			case 'link':
-				// For now, toggle a link mark with a placeholder URL
-				// In the future, this could open a link dialog
-				if (marks.link) {
-					const hasLink = state.doc.rangeHasMark(state.selection.from, state.selection.to, marks.link);
-					if (hasLink) {
-						toggleMark(marks.link)(state, dispatch);
-					} else {
-						const url = prompt('Enter URL:');
-						if (url) {
-							toggleMark(marks.link, { href: url })(state, dispatch);
-						}
-					}
-				}
-				break;
-		}
-
-		editorView.focus();
-	}
+	let suppressNextChange = false; // guard against echoing import back as a change
+	let lastEmittedMarkdown: string | null = null;
 
 	function cancelPendingChange() {
 		if (onChangeDebounceTimer) {
@@ -149,136 +59,93 @@
 		}
 	}
 
-	// Initialize ProseMirror
-	function initializeEditor(container: HTMLElement, initialContent: string) {
-
-		if (editorView) {
-			// Drop any pending debounced onChange — the captured doc belongs to
-			// the previous editor state and would otherwise fire into the
-			// freshly initialised view (or, when this component instance is
-			// reused for a different card slot via key reordering, into the
-			// wrong card).
-			cancelPendingChange();
-			editorView.destroy();
-		}
-
-		const doc = parseMarkdown(initialContent, onParseFallback);
-		if (!doc) {
-			console.error('Failed to parse markdown');
-			return;
-		}
-
-		let state = EditorState.create({
-			doc,
-			plugins: [
-				history(),
-				// MUST be before tableEditing() so our Backspace handler (deleteSelectedRowsColumns)
-				// intercepts before the table plugin's default cell-clearing behavior (Bug #8 fix)
-				createQuillmarkKeymap({}),
-				keymap(baseKeymap),
-				// Table plugin comes after our keymap
-				tableEditing(),
-				createQuillmarkInputRules(),
-				dropCursor(),
-				gapCursor()
-			]
-		});
-
-		// Fix any malformed tables in the parsed document (mismatched cell counts, etc.)
-		const fix = fixTables(state);
-		if (fix) {
-			state = state.apply(fix.setMeta('addToHistory', false));
-		}
-
-		// Check initial empty state
-		isEmpty = isDocumentEmpty(doc);
-
-		editorView = new EditorView(container, {
-			state,
-			handleDOMEvents: {
-				// Intercept iOS native formatting commands (Bold/Italic/etc. from the iOS
-				// context menu toolbar). Without this, iOS modifies the contentEditable DOM
-				// directly via execCommand, bypassing ProseMirror's state management and
-				// causing reconciliation issues that leave buttons unresponsive on mobile.
-				beforeinput(view, event) {
-					const inputEvent = event as InputEvent;
-					const { marks } = quillmarkSchema;
-					switch (inputEvent.inputType) {
-						case 'formatBold':
-							inputEvent.preventDefault();
-							toggleMark(marks.strong)(view.state, view.dispatch);
-							return true;
-						case 'formatItalic':
-							inputEvent.preventDefault();
-							toggleMark(marks.em)(view.state, view.dispatch);
-							return true;
-						case 'formatUnderline':
-							inputEvent.preventDefault();
-							toggleMark(marks.underline)(view.state, view.dispatch);
-							return true;
-						case 'formatStrikeThrough':
-							inputEvent.preventDefault();
-							if (marks.strikethrough) {
-								toggleMark(marks.strikethrough)(view.state, view.dispatch);
-							}
-							return true;
-					}
-					return false;
-				}
-			},
-			dispatchTransaction(tr) {
-				if (!editorView) return;
-				const newState = editorView.state.apply(tr);
-				editorView.updateState(newState);
-
-				// Update empty state
-				if (tr.docChanged) {
-					isEmpty = isDocumentEmpty(newState.doc);
-
-					// Debounce onChange to avoid expensive serialization on every keystroke
-					if (onChangeDebounceTimer) {
-						clearTimeout(onChangeDebounceTimer);
-					}
-					onChangeDebounceTimer = setTimeout(() => {
-						const markdown = serializeMarkdown(newState.doc);
-						onChange(markdown);
-						}, 100); // 100ms debounce
-
-						initializedWithContent = true;
-					}
-
-				// Table detection: find the <table> DOM element when cursor is in a table
-				if (tr.selectionSet || tr.docChanged) {
-					if (isInTable(newState)) {
-						const result = findTable(newState.selection.$from);
-						if (result && editorView) {
-							const dom = editorView.nodeDOM(result.pos);
-							tableElement = (dom instanceof HTMLElement ? dom : null);
-						} else {
-							tableElement = null;
-						}
-					} else {
-						tableElement = null;
-					}
-				}
-
-			}
+	function isDocumentEmpty(view: LexicalEditor): boolean {
+		return view.getEditorState().read(() => {
+			const root = getRoot();
+			const children = root.getChildren();
+			if (children.length === 0) return true;
+			if (children.length > 1) return false;
+			const first = children[0];
+			// A single empty paragraph counts as "empty" for placeholder purposes.
+			return first.getType() === 'paragraph' && first.getTextContent().length === 0;
 		});
 	}
 
+	function initializeEditor(container: HTMLElement, initialContent: string) {
+		if (editorDispose) {
+			cancelPendingChange();
+			editorDispose();
+			editorDispose = null;
+			editor = null;
+		}
 
+		const bundle = createQuillmarkEditor({
+			onError: (err) => console.error('[BodyEditor] lexical error', err)
+		});
+		editor = bundle.editor;
+		editorDispose = bundle.dispose;
 
-	// Mount
+		editor.setRootElement(container);
+
+		// Import the initial markdown. The editor.update inside parseMarkdownInto
+		// fires our update listener — guard against treating the import as a
+		// user-driven change.
+		suppressNextChange = true;
+		parseMarkdownInto(editor, initialContent ?? '', onParseFallback);
+		lastEmittedMarkdown = initialContent ?? '';
+		isEmpty = isDocumentEmpty(editor);
+
+		const unregister = editor.registerUpdateListener(({ dirtyElements, dirtyLeaves }) => {
+			if (suppressNextChange) {
+				suppressNextChange = false;
+				return;
+			}
+			// Skip pure selection changes — they don't mutate any node.
+			const docChanged = dirtyElements.size > 0 || dirtyLeaves.size > 0;
+			if (!docChanged) return;
+			if (!editor) return;
+
+			isEmpty = isDocumentEmpty(editor);
+
+			cancelPendingChange();
+			onChangeDebounceTimer = setTimeout(() => {
+				if (!editor) return;
+				const md = serializeMarkdownSafe(editor);
+				if (md === lastEmittedMarkdown) return;
+				lastEmittedMarkdown = md;
+				onChange(md);
+				initializedWithContent = true;
+			}, 100);
+		});
+
+		// Save the listener teardown so dispose cleans it up too.
+		const prevDispose = editorDispose;
+		editorDispose = () => {
+			try {
+				unregister();
+			} catch {
+				/* noop */
+			}
+			prevDispose?.();
+		};
+	}
+
+	function serializeMarkdownSafe(view: LexicalEditor): string {
+		try {
+			return view.getEditorState().read(() => serializeToMarkdown());
+		} catch (err) {
+			console.error('[BodyEditor] failed to serialize', err);
+			return lastEmittedMarkdown ?? '';
+		}
+	}
+
 	onMount(() => {
 		if (editorElement) {
 			initializeEditor(editorElement, content);
-			if (content) {
-				initializedWithContent = true;
-			}
+			if (content) initializedWithContent = true;
 		}
 	});
 
-	// Watch for content becoming available after mount
 	$effect(() => {
 		if (editorElement && content && !initializedWithContent) {
 			initializeEditor(editorElement, content);
@@ -287,70 +154,53 @@
 	});
 
 	onDestroy(() => {
-		// Clear debounce timer to prevent memory leaks and stale updates
 		cancelPendingChange();
-		editorView?.destroy();
-		editorView = null;
+		if (editor) {
+			editor.setRootElement(null);
+		}
+		editorDispose?.();
+		editorDispose = null;
+		editor = null;
 	});
 
-	// Expose focus method
 	export function focus() {
-		editorView?.focus();
+		editor?.focus();
 	}
 
-	// Expose method to replace text at a range.
-	export function replaceRange(from: number, to: number, text: string) {
-		if (!editorView) return;
-		editorView.dispatch(
-			editorView.state.tr.replaceWith(from, to, editorView.state.schema.text(text))
-		);
+	/**
+	 * Legacy export from the ProseMirror-era component. Lexical doesn't expose
+	 * an integer-position model that maps cleanly to the old API, and no
+	 * production caller currently invokes this — kept as a no-op stub so the
+	 * type contract is preserved during the spike.
+	 */
+	export function replaceRange(_from: number, _to: number, _text: string) {
+		// Intentionally empty — see comment above.
 	}
 
-	// Expose format handler for toolbar commands
 	export function handleFormat(type: string) {
-		if (!editorView) return;
-		
-		const { state, dispatch } = editorView;
-		
-		switch (type) {
-			case 'bulletList':
-				toggleBulletList(state, dispatch);
-				editorView.focus();
-				break;
-			case 'numberedList':
-				toggleOrderedList(state, dispatch);
-				editorView.focus();
-				break;
-			case 'insertTable':
-				insertTable(3, 3)(state, dispatch);
-				editorView.focus();
-				break;
-		}
+		if (!editor) return;
+		applyFormat(editor, type as FormatType);
+		editor.focus();
 	}
-
 </script>
 
 <div class="body-editor" bind:this={containerElement}>
 	<div
 		bind:this={editorElement}
-		class="prosemirror-container"
+		class="lexical-container"
 		class:is-empty={isEmpty}
 		data-placeholder={placeholder}
+		contenteditable="true"
+		role="textbox"
+		aria-multiline="true"
+		spellcheck="true"
 	></div>
 
 	<!-- Selection Toolbar (contextual popover) -->
 	<SelectionToolbar
 		{containerElement}
-		onFormat={handleSelectionFormat}
+		onFormat={handleFormat}
 	/>
-
-	<!-- Obsidian-style Table Controls (hover zones around table edges) -->
-	{#if editorView && tableElement}
-		<TableControls
-			{editorView}
-			{tableElement}
-		/>
-	{/if}
 </div>
 
 <style>
@@ -359,24 +209,19 @@
 		margin-top: 0.25rem;
 	}
 
-	.prosemirror-container :global(.ProseMirror) {
+	.lexical-container {
 		box-sizing: border-box;
 		width: 100%;
-		padding-inline: .5rem;
-		padding-top: .5rem;
-		padding-bottom: .5rem;
-	}
-
-
-	.prosemirror-container {
+		padding: 0.5rem;
 		font-family: var(--font-sans, system-ui, sans-serif);
 		font-size: 15px;
 		color: var(--qm-foreground);
 		min-height: 0;
+		outline: none;
 	}
 
 	/* Placeholder styling */
-	.prosemirror-container.is-empty::before {
+	.lexical-container.is-empty::before {
 		content: attr(data-placeholder);
 		position: absolute;
 		top: 0.5rem;
@@ -387,83 +232,61 @@
 		font-style: italic;
 	}
 
-	/* ProseMirror editor styles */
-	.prosemirror-container :global(.ProseMirror) {
-		outline: none;
-	}
-
-	.prosemirror-container :global(.ProseMirror > *:first-child) {
+	.lexical-container :global(> *:first-child) {
 		margin-top: 0;
 	}
 
-	/* Lists had no vertical margin; first top-level list was flush to the editor top */
-	.prosemirror-container :global(.ProseMirror > ul:first-child),
-	.prosemirror-container :global(.ProseMirror > ol:first-child) {
-		margin-top: 1rem;
-	}
-
-	.prosemirror-container :global(.ProseMirror p) {
+	/* Paragraphs */
+	.lexical-container :global(.qm-paragraph) {
 		margin: 1rem 0 0 0;
 		line-height: 1.5;
 	}
-
-	.prosemirror-container :global(.ProseMirror p:last-child) {
+	.lexical-container :global(.qm-paragraph:last-child) {
 		margin-bottom: 0;
 	}
 
-	.prosemirror-container :global(.ProseMirror h1) {
+	/* Headings */
+	.lexical-container :global(.qm-h1) {
 		font-size: 2em;
 		font-weight: 700;
 		margin: 0.67em 0;
 		line-height: 1.2;
 	}
-
-	.prosemirror-container :global(.ProseMirror h2) {
+	.lexical-container :global(.qm-h2) {
 		font-size: 1.5em;
 		font-weight: 600;
 		margin: 0.75em 0;
 		line-height: 1.3;
 	}
-
-	.prosemirror-container :global(.ProseMirror h3) {
+	.lexical-container :global(.qm-h3) {
 		font-size: 1.25em;
 		font-weight: 600;
 		margin: 0.8em 0;
 		line-height: 1.4;
 	}
 
-	.prosemirror-container :global(.ProseMirror ul),
-	.prosemirror-container :global(.ProseMirror ol) {
-		margin: 1rem 0 0 .5rem;
+	/* Lists */
+	.lexical-container :global(.qm-ul),
+	.lexical-container :global(.qm-ol) {
+		margin: 1rem 0 0 0.5rem;
 		padding-left: 1rem;
+	}
+	.lexical-container :global(.qm-ul) {
 		list-style-type: disc;
 	}
-	.prosemirror-container :global(.ProseMirror ol) {
+	.lexical-container :global(.qm-ol) {
 		list-style-type: decimal;
 	}
-
-	.prosemirror-container :global(.ProseMirror li > ul),
-	.prosemirror-container :global(.ProseMirror li > ol) {
-		margin-top: 0;
-		margin-bottom: 0;
-	}
-
-	.prosemirror-container :global(.ProseMirror li > p) {
-		margin-top: 0;
-		margin-bottom: 0;
-		line-height: 1.5;
-	}
-
-	.prosemirror-container :global(.ProseMirror li > p + p) {
-		margin-top: 1em;
-	}
-
-	.prosemirror-container :global(.ProseMirror li) {
+	.lexical-container :global(.qm-li) {
 		margin: 0;
 		line-height: 1.5;
 	}
+	.lexical-container :global(.qm-nested-listitem) {
+		list-style-type: none;
+	}
 
-	.prosemirror-container :global(.ProseMirror blockquote) {
+	/* Quote */
+	.lexical-container :global(.qm-quote) {
 		border-left: 3px solid var(--qm-border);
 		margin: 1em 0;
 		padding-left: 1em;
@@ -471,95 +294,74 @@
 		font-style: italic;
 	}
 
-	.prosemirror-container :global(.ProseMirror code) {
+	/* Inline code + code blocks */
+	.lexical-container :global(.qm-text-code) {
 		background: var(--qm-muted);
-		padding: 0rem 0rem;
+		padding: 0 0.15em;
 		border-radius: 3px;
 		font-family: var(--font-mono, monospace);
 		font-size: 0.9em;
 	}
-
-	.prosemirror-container :global(.ProseMirror pre) {
+	.lexical-container :global(.qm-code-block) {
+		display: block;
 		background: var(--qm-muted);
 		padding: 1em;
 		border-radius: 6px;
 		overflow-x: auto;
 		margin: 1em 0;
+		font-family: var(--font-mono, monospace);
+		font-size: 0.9em;
 	}
 
-	.prosemirror-container :global(.ProseMirror pre code) {
-		background: none;
-		padding: 0;
-	}
-
-	.prosemirror-container :global(.ProseMirror hr) {
-		border: none;
-		border-top: 1px solid var(--qm-border);
-		margin: 2em 0;
-	}
-
-	.prosemirror-container :global(.ProseMirror a) {
+	/* Links */
+	.lexical-container :global(.qm-link) {
 		color: var(--qm-accent-foreground);
 		text-decoration: underline;
 	}
 
-	.prosemirror-container :global(.ProseMirror u) {
+	/* Text formats */
+	.lexical-container :global(.qm-text-bold) {
+		font-weight: 700;
+	}
+	.lexical-container :global(.qm-text-italic) {
+		font-style: italic;
+	}
+	.lexical-container :global(.qm-text-underline) {
 		text-decoration: underline;
 	}
-
-	.prosemirror-container :global(.ProseMirror s) {
+	.lexical-container :global(.qm-text-strikethrough) {
 		text-decoration: line-through;
 	}
-
-	/* Gap cursor */
-	.prosemirror-container :global(.ProseMirror-gapcursor:after) {
-		border-top: 1px solid var(--qm-foreground);
+	.lexical-container :global(.qm-text-underline-strikethrough) {
+		text-decoration: underline line-through;
 	}
 
-	/* Selection */
-	.prosemirror-container :global(.ProseMirror-selectednode) {
-		outline: 2px solid var(--qm-accent);
-		outline-offset: 2px;
-	}
-
-	/* ========================================
-	   Table Styles
-	   ======================================== */
-
-	/* Table base */
-	.prosemirror-container :global(.ProseMirror table) {
+	/* Tables */
+	.lexical-container :global(.qm-table) {
 		border-collapse: collapse;
 		width: auto;
 		margin: 1em 0;
 	}
-
-	.prosemirror-container :global(.ProseMirror th),
-	.prosemirror-container :global(.ProseMirror td) {
-		/* Use border-hover for ~30% more contrast than base border in dark mode */
+	.lexical-container :global(.qm-table-cell),
+	.lexical-container :global(.qm-table-cell-header) {
 		border: 1px solid var(--qm-border-hover, var(--qm-border));
 		padding: 0.4em 0.6em;
 		text-align: left;
 		vertical-align: top;
-		position: relative;
 		min-width: 4em;
-		cursor: text;
 	}
-
-	.prosemirror-container :global(.ProseMirror th) {
-		/* secondary (#edeff1 light / #313135 dark) gives clear elevation over td */
+	.lexical-container :global(.qm-table-cell-header) {
 		background: var(--qm-secondary);
 		font-weight: 600;
 	}
 
-	/* Cell selection — brand blue gives unambiguous interactive feedback */
-	.prosemirror-container :global(.selectedCell) {
-		background: color-mix(in srgb, var(--qm-brand) 20%, transparent);
-		box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--qm-brand) 60%, transparent);
+	/* Inline metadata separator */
+	.lexical-container :global(.qm-inline-metadata) {
+		height: 2px;
+		margin: 0.5rem 0;
+		background: linear-gradient(90deg, transparent, var(--qm-border), transparent);
+		border-radius: 1px;
+		opacity: 0.6;
+		pointer-events: none;
 	}
-
-	/* Ensure table doesn't overflow editor */
-	.prosemirror-container :global(.ProseMirror .tableWrapper) {
-		overflow-x: auto;
-	}
-
 </style>
