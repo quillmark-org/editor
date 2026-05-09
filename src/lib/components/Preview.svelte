@@ -4,7 +4,7 @@
 	import { CircleAlert, MapPin, Lightbulb, TriangleAlert } from 'lucide-svelte';
 	import { resultToBlob, resultToSVGPages } from '$lib/utils/render-result.js';
 	import { getQuillmarkContext } from '$lib/context.js';
-	import type { RenderResult, QuillmarkDiagnostic } from '$lib/types.js';
+	import type { RenderSession, QuillmarkDiagnostic } from '$lib/types.js';
 	import { extractSvgDimensions, buildSvgSrcdoc } from '$lib/utils/svg';
 
 	const bindings = getQuillmarkContext();
@@ -26,64 +26,56 @@
 
 	let { markdown, quillName, onPreviewStatusChange, onPreviewClick }: Props = $props();
 
-	// Use QuillmarkDiagnostic directly for state
 	interface ErrorDisplayState {
-		message: string; // Top-level summary message
+		message: string;
 		diagnostics: QuillmarkDiagnostic[];
 	}
 
 	// State
 	let loading = $state(false);
 	let errorDisplay = $state<ErrorDisplayState | null>(null);
-	let renderResult = $state<RenderResult | null>(null);
-	let lastSuccessfulResult = $state<RenderResult | null>(null);
-	let pdfObjectUrl = $state<string | null>(null);
-	let lastSuccessfulPdfUrl = $state<string | null>(null);
-	let svgPages = $state<string[]>([]);
+
+	// Canvas path — only updated on successful renders
+	let lastSuccessfulSession = $state<RenderSession | null>(null);
+
+	// SVG/PDF fallback path — used when session.supportsCanvas is false
 	let lastSuccessfulSvgPages = $state<string[]>([]);
+	let lastSuccessfulPdfUrl = $state<string | null>(null);
+	let pdfObjectUrl = $state<string | null>(null);
 
-	// Track latest render ID for cancellation (plain variable — not reactive,
-	// since it's only used inside renderPreview() for async cancellation)
+	// Warnings from the last successful render
+	let lastSuccessfulWarnings = $state<QuillmarkDiagnostic[]>([]);
+
 	let currentRenderId = 0;
-
-	// Container element for ruler overlay
 	let previewContainer = $state<HTMLElement | null>(null);
 
-	// Derived state: whether we have a successful preview
-	let hasSuccessfulPreview = $derived(lastSuccessfulResult !== null);
+	let hasSuccessfulPreview = $derived(
+		lastSuccessfulSession !== null ||
+		lastSuccessfulSvgPages.length > 0 ||
+		lastSuccessfulPdfUrl !== null
+	);
 
-	// Dark mode tracking for comfort mode
 	let isDarkMode = $state(false);
 	let themeObserver: MutationObserver | null = null;
 
-	// Touch-hold state for mobile undim
 	let isHolding = $state(false);
 	let holdTimer: ReturnType<typeof setTimeout> | null = null;
 
 	function onTouchStart() {
-		holdTimer = setTimeout(() => {
-			isHolding = true;
-		}, 200);
+		holdTimer = setTimeout(() => { isHolding = true; }, 200);
 	}
 
 	function onTouchEnd() {
-		if (holdTimer) {
-			clearTimeout(holdTimer);
-			holdTimer = null;
-		}
+		if (holdTimer) { clearTimeout(holdTimer); holdTimer = null; }
 		isHolding = false;
 	}
 
-	// Notify parent when preview status changes
 	$effect(() => {
 		if (onPreviewStatusChange) {
 			onPreviewStatusChange(hasSuccessfulPreview);
 		}
 	});
 
-	/**
-	 * Extract error display information from caught error
-	 */
 	function extractErrorDisplay(error: unknown): ErrorDisplayState {
 		if (isDiagnosticError(error)) {
 			if (Array.isArray(error.diagnostics) && error.diagnostics.length > 0) {
@@ -115,145 +107,152 @@
 		return { message, diagnostics: [] };
 	}
 
+	function revokePdfUrls() {
+		if (pdfObjectUrl) { URL.revokeObjectURL(pdfObjectUrl); pdfObjectUrl = null; }
+		if (lastSuccessfulPdfUrl) { URL.revokeObjectURL(lastSuccessfulPdfUrl); lastSuccessfulPdfUrl = null; }
+	}
 
-	// Loading delay timer
+	// Svelte action: paint a single page of a RenderSession into a canvas element.
+	// Repaints on container resize so the canvas fills the available width.
+	function paintPage(canvas: HTMLCanvasElement, params: { session: RenderSession; page: number }) {
+		let current = params;
+		let ro: ResizeObserver | null = null;
+
+		function doPaint() {
+			const parent = canvas.parentElement;
+			if (!parent) return;
+			const w = parent.clientWidth;
+			if (w === 0) return;
+			try {
+				const size = current.session.pageSize(current.page);
+				const layoutScale = w / size.widthPt;
+				const ctx = canvas.getContext('2d');
+				if (!ctx) return;
+				const result = current.session.paint(ctx, current.page, {
+					layoutScale,
+					densityScale: window.devicePixelRatio
+				});
+				canvas.style.width = result.layoutWidth + 'px';
+				canvas.style.height = result.layoutHeight + 'px';
+			} catch (e) {
+				console.error('[preview] canvas paint error:', e);
+			}
+		}
+
+		doPaint();
+		ro = new ResizeObserver(doPaint);
+		if (canvas.parentElement) ro.observe(canvas.parentElement);
+
+		return {
+			update(p: { session: RenderSession; page: number }) {
+				current = p;
+				doPaint();
+			},
+			destroy() {
+				ro?.disconnect();
+			}
+		};
+	}
+
 	let loadingTimer: ReturnType<typeof setTimeout> | null = null;
 
-	/**
-	 * Render markdown using Quillmark service.
-	 *
-	 * Accepts explicit md/qn parameters so values are captured at call time
-	 * (inside the $effect that tracks the reactive props), preventing stale
-	 * reads during async execution.
-	 */
 	async function renderPreview(md: string, qn: string | null | undefined): Promise<void> {
 		const renderId = ++currentRenderId;
 
-		// Keep showing loading screen while service initializes
-		if (!bindings.isReady) {
-			return;
-		}
+		if (!bindings.isReady) return;
 
 		if (!md) {
-			renderResult = null;
-			svgPages = [];
-			// Clean up PDF object URL when clearing
-			if (pdfObjectUrl) {
-				URL.revokeObjectURL(pdfObjectUrl);
-				pdfObjectUrl = null;
-			}
+			lastSuccessfulSession?.free();
+			lastSuccessfulSession = null;
+			lastSuccessfulSvgPages = [];
+			revokePdfUrls();
+			lastSuccessfulWarnings = [];
 			return;
 		}
 
-		// Clear any existing loading timer to prevent race conditions
-		if (loadingTimer) {
-			clearTimeout(loadingTimer);
-			loadingTimer = null;
-		}
-
-		// Start a timer to show loading spinner only if render takes too long
-		loadingTimer = setTimeout(() => {
-			loading = true;
-		}, 500);
-
+		if (loadingTimer) { clearTimeout(loadingTimer); loadingTimer = null; }
+		loadingTimer = setTimeout(() => { loading = true; }, 500);
 		errorDisplay = null;
 
+		let newSession: RenderSession | null = null;
+		let sessionConsumed = false;
+
 		try {
-			let preferredFormat: 'svg' | 'pdf' = 'svg';
+			newSession = await bindings.openSession(md);
 
-			// Use the captured quillName to check formats.
-			// Format support rarely changes between versions, and the engine will
-			// natively use the accurate quill version based on the markdown content.
-			if (qn) {
-				try {
-					await bindings.ensureQuillResolved(qn);
-					const info = bindings.getQuillInfo(qn);
-					// Prefer SVG for preview, fall back to PDF if SVG not supported
-					if (info.supportedFormats.includes('svg')) {
-						preferredFormat = 'svg';
-					} else if (info.supportedFormats.includes('pdf')) {
-						preferredFormat = 'pdf';
-					}
-				} catch {
-					// If getQuillInfo fails, default to SVG
-					// This can happen during rapid typing if the quill name is temporarily invalid
-				}
-			}
-
-			// Render with the preferred format
-			const result = await bindings.render(md, preferredFormat);
-			
-			// Check if this render was cancelled by a newer one
 			if (renderId !== currentRenderId) {
+				newSession.free();
 				return;
 			}
 
-			renderResult = result;
+			if (newSession.supportsCanvas) {
+				// Canvas path — keep session alive for painting
+				const prev = lastSuccessfulSession;
+				lastSuccessfulSession = newSession;
+				sessionConsumed = true;
+				lastSuccessfulWarnings = Array.from(newSession.warnings) as QuillmarkDiagnostic[];
 
-			// Clean up previous PDF object URL before creating new one
-			if (pdfObjectUrl) {
-				URL.revokeObjectURL(pdfObjectUrl);
-				pdfObjectUrl = null;
-			}
+				lastSuccessfulSvgPages = [];
+				revokePdfUrls();
 
-			// Process output based on format
-			if (result.outputFormat === 'svg') {
-				svgPages = resultToSVGPages(result);
-			} else if (result.outputFormat === 'pdf') {
-				// Create new object URL for PDF only on new render
-				svgPages = [];
-				const blob = resultToBlob(result);
-				pdfObjectUrl = URL.createObjectURL(blob);
+				prev?.free();
 			} else {
-				svgPages = [];
-			}
-
-			// Save successful render state
-			lastSuccessfulResult = result;
-			lastSuccessfulSvgPages = svgPages;
-			if (pdfObjectUrl) {
-				// Clean up old successful PDF URL
-				if (lastSuccessfulPdfUrl) {
-					URL.revokeObjectURL(lastSuccessfulPdfUrl);
+				// Fallback: render to bytes using session.render()
+				let format: 'svg' | 'pdf' = 'svg';
+				if (qn) {
+					try {
+						const info = bindings.getQuillInfo(qn);
+						if (!info.supportedFormats.includes('svg') && info.supportedFormats.includes('pdf')) {
+							format = 'pdf';
+						}
+					} catch { /* default to svg */ }
 				}
-				lastSuccessfulPdfUrl = pdfObjectUrl;
+
+				const result = newSession.render({ format });
+				newSession.free();
+				sessionConsumed = true;
+
+				const prev = lastSuccessfulSession;
+				lastSuccessfulSession = null;
+				prev?.free();
+
+				lastSuccessfulWarnings = Array.from(result.warnings) as QuillmarkDiagnostic[];
+
+				if (result.outputFormat === 'svg') {
+					lastSuccessfulSvgPages = resultToSVGPages(result);
+					revokePdfUrls();
+				} else if (result.outputFormat === 'pdf') {
+					lastSuccessfulSvgPages = [];
+					if (pdfObjectUrl) URL.revokeObjectURL(pdfObjectUrl);
+					const blob = resultToBlob(result);
+					pdfObjectUrl = URL.createObjectURL(blob);
+					if (lastSuccessfulPdfUrl) URL.revokeObjectURL(lastSuccessfulPdfUrl);
+					lastSuccessfulPdfUrl = pdfObjectUrl;
+				} else {
+					lastSuccessfulSvgPages = [];
+					revokePdfUrls();
+				}
 			}
 
-			// Clear error on successful render
 			errorDisplay = null;
 		} catch (err) {
+			if (!sessionConsumed) newSession?.free();
 			errorDisplay = extractErrorDisplay(err);
 		} finally {
-			// Clear the loading timer if it hasn't fired yet
-			if (loadingTimer) {
-				clearTimeout(loadingTimer);
-				loadingTimer = null;
-			}
+			if (loadingTimer) { clearTimeout(loadingTimer); loadingTimer = null; }
 			loading = false;
 		}
 	}
 
-	/**
-	 * The bindings are managed by the consumer. We only show a loading
-	 * placeholder while `isReady` is false; we never call initialize() here.
-	 */
 	function initializeService(): void {
 		if (!bindings.isReady) {
 			loading = true;
 		}
 	}
 
-	/**
-	 * Trigger render when markdown or quillName changes.
-	 *
-	 * Values are captured inside the effect (where Svelte tracks reactive reads)
-	 * and passed as parameters to renderPreview(), preventing stale reads during
-	 * async execution. The parent's debouncedContent provides 50ms debouncing.
-	 */
 	$effect(() => {
 		const md = markdown;
 		const qn = quillName;
-
 		if (browser) {
 			renderPreview(md, qn);
 		}
@@ -261,14 +260,10 @@
 
 	onMount(async () => {
 		await initializeService();
-		// After initialization, trigger an initial render since the $effect
-		// that tracks markdown/quillName may have already run (and returned early
-		// because the service wasn't ready yet).
 		if (bindings.isReady) {
 			renderPreview(markdown, quillName);
 		}
 
-		// Dark mode observer — watch for `.qm-dark` toggling on any ancestor.
 		if (browser && previewContainer) {
 			isDarkMode = previewContainer.closest('.qm-dark') != null;
 			themeObserver = new MutationObserver(() => {
@@ -283,19 +278,11 @@
 	});
 
 	onDestroy(() => {
-		if (themeObserver) {
-			themeObserver.disconnect();
-		}
-		if (holdTimer) {
-			clearTimeout(holdTimer);
-		}
-		// Clean up PDF object URLs
-		if (pdfObjectUrl) {
-			URL.revokeObjectURL(pdfObjectUrl);
-		}
-		if (lastSuccessfulPdfUrl) {
-			URL.revokeObjectURL(lastSuccessfulPdfUrl);
-		}
+		if (themeObserver) themeObserver.disconnect();
+		if (holdTimer) clearTimeout(holdTimer);
+		lastSuccessfulSession?.free();
+		if (pdfObjectUrl) URL.revokeObjectURL(pdfObjectUrl);
+		if (lastSuccessfulPdfUrl) URL.revokeObjectURL(lastSuccessfulPdfUrl);
 	});
 </script>
 
@@ -314,41 +301,114 @@
 				<p class="text-muted-foreground">Rendering preview...</p>
 			</div>
 		</div>
-	{:else if errorDisplay}
-		<!-- Show error overlay with last successful render in background -->
-		<div class="relative h-full">
-			<!-- Background: Last successful render (dimmed) -->
-			{#if lastSuccessfulResult?.outputFormat === 'svg' && lastSuccessfulSvgPages.length > 0}
-				<div class="preview-svg-container opacity-30 blur-sm">
-					{#each lastSuccessfulSvgPages as page, index (index)}
-						{@const dims = extractSvgDimensions(page)}
-						<div class="preview-svg-page">
-							<div class="relative w-full">
-								<iframe
-									title="Page {index + 1} preview"
-									srcdoc={buildSvgSrcdoc(page)}
-									sandbox=""
-									class="preview-svg-iframe"
-									style="aspect-ratio: {dims.width} / {dims.height};"
-								></iframe>
+	{:else}
+		<!-- Content layer: always shows the last successful render, dimmed when there's an error -->
+		{#if lastSuccessfulSession && lastSuccessfulSession.pageCount > 0}
+			<!-- svelte-ignore a11y_no_static_element_interactions -->
+			<div
+				class="preview-canvas-container"
+				class:preview-comfort-active={isDarkMode && !isHolding && !errorDisplay}
+				class:opacity-30={!!errorDisplay}
+				class:blur-sm={!!errorDisplay}
+				class:pointer-events-none={!!errorDisplay}
+				ontouchstart={onTouchStart}
+				ontouchend={onTouchEnd}
+				ontouchcancel={onTouchEnd}
+			>
+				{#each { length: lastSuccessfulSession.pageCount } as _, i (i)}
+					<div class="preview-canvas-page">
+						<canvas use:paintPage={{ session: lastSuccessfulSession, page: i }}></canvas>
+						{#if !errorDisplay}
+							<button type="button" class="preview-canvas-mask" onclick={onPreviewClick} aria-label="Edit document"></button>
+						{/if}
+					</div>
+				{/each}
+			</div>
+		{:else if lastSuccessfulSvgPages.length > 0}
+			<!-- SVG fallback -->
+			<!-- svelte-ignore a11y_no_static_element_interactions -->
+			<div
+				class="preview-svg-container"
+				class:preview-comfort-active={isDarkMode && !isHolding && !errorDisplay}
+				class:opacity-30={!!errorDisplay}
+				class:blur-sm={!!errorDisplay}
+				class:pointer-events-none={!!errorDisplay}
+				ontouchstart={onTouchStart}
+				ontouchend={onTouchEnd}
+				ontouchcancel={onTouchEnd}
+			>
+				{#each lastSuccessfulSvgPages as page, index (index)}
+					{@const dims = extractSvgDimensions(page)}
+					<div class="preview-svg-page">
+						<div class="relative w-full">
+							<iframe
+								title="Page {index + 1} preview"
+								srcdoc={buildSvgSrcdoc(page)}
+								sandbox=""
+								class="preview-svg-iframe"
+								style="aspect-ratio: {dims.width} / {dims.height};"
+							></iframe>
+							{#if !errorDisplay}
 								<button type="button" class="preview-iframe-mask" onclick={onPreviewClick} aria-label="Edit document"></button>
-							</div>
+							{/if}
 						</div>
-					{/each}
-				</div>
-			{:else if lastSuccessfulResult?.outputFormat === 'pdf' && lastSuccessfulPdfUrl}
-				<div class="relative h-full w-full">
-					<iframe
-						src={lastSuccessfulPdfUrl}
-						title="PDF preview (last successful)"
-						class="h-full w-full border-0 opacity-30 blur-sm"
-						aria-label="PDF preview"
-					></iframe>
+					</div>
+				{/each}
+			</div>
+		{:else if lastSuccessfulPdfUrl}
+			<!-- PDF fallback -->
+			<!-- svelte-ignore a11y_no_static_element_interactions -->
+			<div
+				class="relative h-full w-full"
+				class:preview-comfort-active={isDarkMode && !isHolding && !errorDisplay}
+				class:opacity-30={!!errorDisplay}
+				class:blur-sm={!!errorDisplay}
+				class:pointer-events-none={!!errorDisplay}
+				ontouchstart={onTouchStart}
+				ontouchend={onTouchEnd}
+				ontouchcancel={onTouchEnd}
+			>
+				<iframe
+					src={lastSuccessfulPdfUrl}
+					title="PDF preview"
+					class="h-full w-full border-0"
+					aria-label="PDF preview"
+				></iframe>
+				{#if !errorDisplay}
 					<button type="button" class="preview-iframe-mask" onclick={onPreviewClick} aria-label="Edit document"></button>
-				</div>
-			{/if}
+				{/if}
+			</div>
+		{/if}
 
-			<!-- Foreground: Error overlay -->
+		<!-- Warnings overlay (success state only) -->
+		{#if !errorDisplay && lastSuccessfulWarnings.length > 0}
+			<div class="absolute top-0 right-0 z-10 p-4 max-w-md">
+				<div class="rounded-lg border border-warning-border bg-warning-background/90 p-4 shadow-lg backdrop-blur-sm">
+					<div class="mb-2 flex items-center gap-2">
+						<TriangleAlert class="h-5 w-5 text-warning" aria-hidden="true" />
+						<h3 class="font-semibold text-warning-foreground">Warnings</h3>
+					</div>
+					<div class="space-y-3 max-h-60 overflow-y-auto">
+						{#each lastSuccessfulWarnings as diagnostic, index (index)}
+							<div class="text-sm">
+								<p class="text-warning-foreground font-medium">{diagnostic.message}</p>
+								{#if diagnostic.hint}
+									<p class="text-warning-foreground/80 mt-1 italic">Hint: {diagnostic.hint}</p>
+								{/if}
+								{#if diagnostic.location}
+									<p class="text-warning-foreground/70 text-xs mt-1 font-mono">
+										Line {diagnostic.location.line}, Col {diagnostic.location.column}
+									</p>
+								{/if}
+							</div>
+						{/each}
+					</div>
+				</div>
+			</div>
+		{/if}
+
+		<!-- Error overlay -->
+		{#if errorDisplay}
 			<div
 				class="absolute inset-0 flex items-center justify-center bg-background/80 p-4 backdrop-blur-sm"
 			>
@@ -432,114 +492,14 @@
 								{/if}
 							</div>
 						{/each}
-						
+
 						{#if errorDisplay.diagnostics.length === 0}
 							<p class="text-error-foreground">{errorDisplay.message}</p>
 						{/if}
 					</div>
 				</div>
 			</div>
-		</div>
-	{:else if renderResult?.outputFormat === 'svg' && svgPages.length > 0}
-		<div class="relative h-full">
-			<!-- Diagnostics Overlay (Warnings/Hints) -->
-			{#if renderResult.warnings && renderResult.warnings.length > 0}
-				<div class="absolute top-0 right-0 z-10 p-4 max-w-md">
-					<div class="rounded-lg border border-warning-border bg-warning-background/90 p-4 shadow-lg backdrop-blur-sm">
-						<div class="mb-2 flex items-center gap-2">
-							<TriangleAlert class="h-5 w-5 text-warning" aria-hidden="true" />
-							<h3 class="font-semibold text-warning-foreground">Warnings</h3>
-						</div>
-						<div class="space-y-3 max-h-60 overflow-y-auto">
-							{#each renderResult.warnings as diagnostic, index (index)}
-								<div class="text-sm">
-									<p class="text-warning-foreground font-medium">{diagnostic.message}</p>
-									{#if diagnostic.hint}
-										<p class="text-warning-foreground/80 mt-1 italic">Hint: {diagnostic.hint}</p>
-									{/if}
-									{#if diagnostic.location}
-										<p class="text-warning-foreground/70 text-xs mt-1 font-mono">
-											Line {diagnostic.location.line}, Col {diagnostic.location.column}
-										</p>
-									{/if}
-								</div>
-							{/each}
-						</div>
-					</div>
-				</div>
-			{/if}
-
-			<!-- svelte-ignore a11y_no_static_element_interactions -->
-		<div
-			class="preview-svg-container"
-			class:preview-comfort-active={isDarkMode && !isHolding}
-			ontouchstart={onTouchStart}
-			ontouchend={onTouchEnd}
-			ontouchcancel={onTouchEnd}
-		>
-				{#each svgPages as page, index (index)}
-					{@const dims = extractSvgDimensions(page)}
-					<div class="preview-svg-page">
-						<div class="relative w-full">
-							<iframe
-								title="Page {index + 1} preview"
-								srcdoc={buildSvgSrcdoc(page)}
-								sandbox=""
-								class="preview-svg-iframe"
-								style="aspect-ratio: {dims.width} / {dims.height};"
-							></iframe>
-							<button type="button" class="preview-iframe-mask" onclick={onPreviewClick} aria-label="Edit document"></button>
-						</div>
-					</div>
-				{/each}
-			</div>
-		</div>
-	{:else if renderResult?.outputFormat === 'pdf' && pdfObjectUrl}
-		<div class="h-full px-2 relative">
-             <!-- Diagnostics Overlay (Warnings/Hints) for PDF -->
-			{#if renderResult.warnings && renderResult.warnings.length > 0}
-				<div class="absolute top-0 right-4 z-10 p-4 max-w-md">
-					<div class="rounded-lg border border-warning-border bg-warning-background/90 p-4 shadow-lg backdrop-blur-sm">
-						<div class="mb-2 flex items-center gap-2">
-							<TriangleAlert class="h-5 w-5 text-warning" aria-hidden="true" />
-							<h3 class="font-semibold text-warning-foreground">Warnings</h3>
-						</div>
-						<div class="space-y-3 max-h-60 overflow-y-auto">
-							{#each renderResult.warnings as diagnostic, index (index)}
-								<div class="text-sm">
-									<p class="text-warning-foreground font-medium">{diagnostic.message}</p>
-									{#if diagnostic.hint}
-										<p class="text-warning-foreground/80 mt-1 italic">Hint: {diagnostic.hint}</p>
-									{/if}
-									{#if diagnostic.location}
-										<p class="text-warning-foreground/70 text-xs mt-1 font-mono">
-											Line {diagnostic.location.line}, Col {diagnostic.location.column}
-										</p>
-									{/if}
-								</div>
-							{/each}
-						</div>
-					</div>
-				</div>
-			{/if}
-
-			<!-- svelte-ignore a11y_no_static_element_interactions -->
-		<div
-			class="relative h-full w-full"
-			class:preview-comfort-active={isDarkMode && !isHolding}
-			ontouchstart={onTouchStart}
-			ontouchend={onTouchEnd}
-			ontouchcancel={onTouchEnd}
-		>
-				<iframe
-					src={pdfObjectUrl}
-					title="PDF preview"
-					class="h-full w-full border-0"
-					aria-label="PDF preview"
-				></iframe>
-				<button type="button" class="preview-iframe-mask" onclick={onPreviewClick} aria-label="Edit document"></button>
-			</div>
-		</div>
+		{/if}
 	{/if}
 
 	</div>
@@ -548,6 +508,36 @@
 <style>
 	.preview-wrapper {
 		position: relative;
+	}
+
+	.preview-canvas-container {
+		padding: 0.75rem;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 0.75rem;
+		min-height: 100%;
+	}
+
+	.preview-canvas-page {
+		position: relative;
+		display: flex;
+		justify-content: center;
+		width: 100%;
+	}
+
+	.preview-canvas-page canvas {
+		display: block;
+		max-width: 100%;
+		box-shadow: 0 0 4px 1px var(--qm-foreground-shadow);
+	}
+
+	.preview-canvas-mask {
+		position: absolute;
+		inset: 0;
+		background: transparent;
+		z-index: 5;
+		cursor: default;
 	}
 
 	.preview-svg-container {

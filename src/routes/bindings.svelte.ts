@@ -8,7 +8,7 @@
  * lives in src/routes (the dev playground), not src/lib.
  */
 
-import type { Document, Quill, Quillmark } from '@quillmark/wasm';
+import type { Document, Quill, Quillmark, RenderSession } from '@quillmark/wasm';
 import type {
 	QuillmarkBindings,
 	QuillmarkDiagnostic,
@@ -141,6 +141,27 @@ class PlaygroundBindings implements QuillmarkBindings {
 			await this.ensureQuillResolved(ref);
 			const { quill } = this.lookupResolved(ref);
 			return quill.render(doc, { format, ...(options ?? {}) });
+		} finally {
+			doc?.free();
+		}
+	}
+
+	async openSession(markdown: string): Promise<RenderSession> {
+		if (!this.engine) throw new Error('Bindings: not initialized');
+		let doc: Document | null = null;
+		try {
+			doc = this.parseDocument(markdown);
+			const ref = doc.quillRef;
+			if (!ref) {
+				const err: Error & { diagnostics?: QuillmarkDiagnostic[] } = new Error(
+					'Missing QUILL directive in document frontmatter.'
+				);
+				err.diagnostics = [];
+				throw err;
+			}
+			await this.ensureQuillResolved(ref);
+			const { quill } = this.lookupResolved(ref);
+			return quill.open(doc);
 		} finally {
 			doc?.free();
 		}

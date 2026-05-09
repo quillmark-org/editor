@@ -14,7 +14,11 @@ import type {
 	RenderResult as WasmRenderResult,
 	RenderOptions as WasmRenderOptions,
 	Artifact as WasmArtifact,
-	Diagnostic as WasmDiagnostic
+	Diagnostic as WasmDiagnostic,
+	RenderSession as WasmRenderSession,
+	PaintOptions as WasmPaintOptions,
+	PaintResult as WasmPaintResult,
+	PageSize as WasmPageSize
 } from '@quillmark/wasm';
 
 /**
@@ -32,6 +36,10 @@ export type RenderResult = WasmRenderResult;
 export type RenderOptions = WasmRenderOptions;
 export type RenderArtifact = WasmArtifact;
 export type QuillmarkDiagnostic = WasmDiagnostic;
+export type RenderSession = WasmRenderSession;
+export type PaintOptions = WasmPaintOptions;
+export type PaintResult = WasmPaintResult;
+export type PageSize = WasmPageSize;
 
 export interface QuillInfo {
 	name: string;
@@ -76,6 +84,12 @@ export interface QuillmarkBindings {
 
 	/** Render markdown to one or more artifacts. */
 	render(markdown: string, format?: RenderFormat, options?: RenderOptions): Promise<RenderResult>;
+
+	/**
+	 * Open a render session for the given markdown. The caller owns the
+	 * returned session and must call session.free() when done.
+	 */
+	openSession(markdown: string): Promise<RenderSession>;
 }
 
 export type EditorMode = 'rich' | 'advanced';
