@@ -113,10 +113,11 @@
 	}
 
 	// Svelte action: paint a single page of a RenderSession into a canvas element.
-	// Repaints on container resize so the canvas fills the available width.
+	// Repaints on container resize (RAF-debounced) so the canvas fills the available width.
 	function paintPage(canvas: HTMLCanvasElement, params: { session: RenderSession; page: number }) {
 		let current = params;
 		let ro: ResizeObserver | null = null;
+		let rafId: number | null = null;
 
 		function doPaint() {
 			const parent = canvas.parentElement;
@@ -139,22 +140,39 @@
 			}
 		}
 
+		function scheduleRepaint() {
+			if (rafId !== null) cancelAnimationFrame(rafId);
+			rafId = requestAnimationFrame(() => { rafId = null; doPaint(); });
+		}
+
+		function reserveSlot() {
+			// Set aspect-ratio from page geometry before the first paint so the
+			// browser never shows the default 300×150 canvas placeholder size.
+			try {
+				const size = current.session.pageSize(current.page);
+				canvas.style.aspectRatio = `${size.widthPt} / ${size.heightPt}`;
+				canvas.style.width = '100%';
+			} catch {}
+		}
+
+		reserveSlot();
 		doPaint();
-		ro = new ResizeObserver(doPaint);
+		ro = new ResizeObserver(scheduleRepaint);
 		if (canvas.parentElement) ro.observe(canvas.parentElement);
 
 		return {
 			update(p: { session: RenderSession; page: number }) {
+				if (p.session === current.session && p.page === current.page) return;
 				current = p;
+				reserveSlot();
 				doPaint();
 			},
 			destroy() {
 				ro?.disconnect();
+				if (rafId !== null) cancelAnimationFrame(rafId);
 			}
 		};
 	}
-
-	let loadingTimer: ReturnType<typeof setTimeout> | null = null;
 
 	async function renderPreview(md: string, qn: string | null | undefined): Promise<void> {
 		const renderId = ++currentRenderId;
@@ -162,6 +180,7 @@
 		if (!bindings.isReady) return;
 
 		if (!md) {
+			errorDisplay = null;
 			lastSuccessfulSession?.free();
 			lastSuccessfulSession = null;
 			lastSuccessfulSvgPages = [];
@@ -170,8 +189,10 @@
 			return;
 		}
 
-		if (loadingTimer) { clearTimeout(loadingTimer); loadingTimer = null; }
-		loadingTimer = setTimeout(() => { loading = true; }, 500);
+		// Each render owns its timer — no shared state that concurrent renders clobber.
+		const timerHandle = setTimeout(() => {
+			if (currentRenderId === renderId) loading = true;
+		}, 500);
 		errorDisplay = null;
 
 		let newSession: RenderSession | null = null;
@@ -190,7 +211,7 @@
 				const prev = lastSuccessfulSession;
 				lastSuccessfulSession = newSession;
 				sessionConsumed = true;
-				lastSuccessfulWarnings = Array.from(newSession.warnings) as QuillmarkDiagnostic[];
+				lastSuccessfulWarnings = newSession.warnings;
 
 				lastSuccessfulSvgPages = [];
 				revokePdfUrls();
@@ -216,7 +237,7 @@
 				lastSuccessfulSession = null;
 				prev?.free();
 
-				lastSuccessfulWarnings = Array.from(result.warnings) as QuillmarkDiagnostic[];
+				lastSuccessfulWarnings = result.warnings;
 
 				if (result.outputFormat === 'svg') {
 					lastSuccessfulSvgPages = resultToSVGPages(result);
@@ -239,8 +260,8 @@
 			if (!sessionConsumed) newSession?.free();
 			errorDisplay = extractErrorDisplay(err);
 		} finally {
-			if (loadingTimer) { clearTimeout(loadingTimer); loadingTimer = null; }
-			loading = false;
+			clearTimeout(timerHandle);
+			if (currentRenderId === renderId) loading = false;
 		}
 	}
 
