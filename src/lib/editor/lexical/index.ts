@@ -11,5 +11,5 @@ export { QUILLMARK_TRANSFORMERS, UNDERLINE } from './transformers';
 
 export { parseMarkdownInto, $serializeToMarkdown, readMarkdown } from './markdown';
 
-export { applyFormat } from './commands';
+export { applyFormat, insertTableAtSize } from './commands';
 export type { FormatType } from './commands';

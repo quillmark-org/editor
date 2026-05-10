@@ -12,12 +12,14 @@
 	import ToolbarButton from './ToolbarButton.svelte';
 	import ToolbarSeparator from './ToolbarSeparator.svelte';
 	import ToolbarContainer from './ToolbarContainer.svelte';
+	import TableGridPicker from './TableGridPicker.svelte';
 
 	interface Props {
 		onFormat: (type: string) => void;
+		onInsertTable: (rows: number, cols: number) => void;
 	}
 
-	let { onFormat }: Props = $props();
+	let { onFormat, onInsertTable }: Props = $props();
 </script>
 
 <ToolbarContainer>
@@ -74,5 +76,10 @@
 			title="Numbered List"
 			icon={ListOrdered}
 		/>
+
+		<ToolbarSeparator />
+
+		<!-- Insert Group -->
+		<TableGridPicker onInsert={onInsertTable} />
 	</div>
 </ToolbarContainer>

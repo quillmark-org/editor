@@ -16,8 +16,10 @@
 		parseMarkdownInto,
 		$serializeToMarkdown as serializeToMarkdown,
 		applyFormat,
+		insertTableAtSize,
 		type FormatType
 	} from '$lib/editor/lexical';
+	import RichTextToolbar from './RichTextToolbar.svelte';
 
 	interface Props {
 		/** Markdown content to edit */
@@ -133,9 +135,22 @@
 		applyFormat(editor, type as FormatType);
 		editor.focus();
 	}
+
+	export function handleInsertTable(rows: number, cols: number) {
+		if (!editor) return;
+		insertTableAtSize(editor, rows, cols);
+		editor.focus();
+	}
 </script>
 
 <div class="body-editor" bind:this={containerElement}>
+	<div class="body-editor-toolbar">
+		<RichTextToolbar
+			onFormat={handleFormat}
+			onInsertTable={handleInsertTable}
+		/>
+	</div>
+
 	<div
 		bind:this={editorElement}
 		class="lexical-container"
@@ -157,7 +172,10 @@
 <style>
 	.body-editor {
 		position: relative;
-		margin-top: 0.25rem;
+	}
+
+	.body-editor-toolbar {
+		border-bottom: 1px solid var(--qm-border);
 	}
 
 	.lexical-container {
