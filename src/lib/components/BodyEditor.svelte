@@ -7,9 +7,21 @@
 	 *   exports: focus(), handleFormat(type)
 	 */
 	import { onMount, onDestroy } from 'svelte';
-	import type { LexicalEditor } from 'lexical';
-	import { $getRoot as getRoot } from 'lexical';
+	import type { LexicalEditor, NodeKey } from 'lexical';
+	import {
+		$getRoot as getRoot,
+		$getSelection as getSelection,
+		$isRangeSelection as isRangeSelection,
+		$isTextNode as isTextNode,
+		$isParagraphNode as isParagraphNode,
+		$getNodeByKey as getNodeByKey
+	} from 'lexical';
+	import { $findMatchingParent as findMatchingParent } from '@lexical/utils';
 	import SelectionToolbar from './SelectionToolbar.svelte';
+	import SlashCommandMenu, { type SlashCommand } from './SlashCommandMenu.svelte';
+	import PlusBlockMenu, { type BlockCommand } from './PlusBlockMenu.svelte';
+	import { Table, List, ListOrdered, Heading1, Heading2, Quote } from 'lucide-svelte';
+	import type { ComponentType } from 'svelte';
 
 	import {
 		createQuillmarkEditor,
@@ -42,6 +54,166 @@
 	let editorDispose: (() => void) | null = null;
 	let onChangeDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 	let lastImportedContent: string | null = null;
+
+	// ── Slash command state ─────────────────────────────────────────────────
+	let slashVisible = $state(false);
+	let slashPos = $state({ x: 0, y: 0 });
+	let slashQuery = $state('');
+	// Non-reactive — only needed at execution time
+	let slashNodeKey: NodeKey | null = null;
+	let slashStartOffset = 0;
+
+	// ── Plus block button state ─────────────────────────────────────────────
+	let plusVisible = $state(false);
+	let plusPos = $state({ x: 0, y: 0 });
+
+	// ── Shared block command list ───────────────────────────────────────────
+	const BLOCK_COMMANDS: (SlashCommand & BlockCommand)[] = [
+		{ id: 'table',        label: 'Table',          description: 'Insert a data table',     icon: Table as ComponentType },
+		{ id: 'heading1',     label: 'Heading 1',      description: 'Large section heading',   icon: Heading1 as ComponentType },
+		{ id: 'heading2',     label: 'Heading 2',      description: 'Medium section heading',  icon: Heading2 as ComponentType },
+		{ id: 'bulletList',   label: 'Bullet List',    description: 'Unordered list',          icon: List as ComponentType },
+		{ id: 'numberedList', label: 'Numbered List',  description: 'Numbered list',           icon: ListOrdered as ComponentType },
+		{ id: 'quote',        label: 'Quote',          description: 'Block quotation',         icon: Quote as ComponentType },
+	];
+
+	// ── Slash + Plus helpers ────────────────────────────────────────────────
+
+	/** Current caret position in viewport coordinates, just below the cursor. */
+	function getCaretViewportPos(): { x: number; y: number } | null {
+		const sel = window.getSelection();
+		if (!sel || sel.rangeCount === 0) return null;
+		const rect = sel.getRangeAt(0).getBoundingClientRect();
+		if (rect.width === 0 && rect.height === 0) return null;
+		return { x: rect.left, y: rect.bottom + 6 };
+	}
+
+	function closeSlash() {
+		slashVisible = false;
+		slashNodeKey = null;
+		slashQuery = '';
+	}
+
+	/**
+	 * Registered after the editor is created. Detects slash commands and
+	 * empty-paragraph positions for the + button on every state update.
+	 */
+	function registerInteractiveDetection(ed: LexicalEditor): () => void {
+		return ed.registerUpdateListener(({ editorState }) => {
+			let showSlash = false;
+			let newQuery = '';
+			let newNodeKey: NodeKey | null = null;
+			let newOffset = 0;
+
+			let showPlus = false;
+			let plusNodeKey: NodeKey | null = null;
+
+			editorState.read(() => {
+				const sel = getSelection();
+				if (!isRangeSelection(sel) || !sel.isCollapsed()) return;
+
+				const anchor = sel.anchor;
+				const node = anchor.getNode();
+
+				// ── Plus button: cursor is in an empty paragraph ──────────────
+				const para = findMatchingParent(node, isParagraphNode);
+				if (para && para.getTextContent() === '') {
+					showPlus = true;
+					plusNodeKey = para.getKey();
+				}
+
+				// ── Slash detection: only inside text nodes ───────────────────
+				if (!isTextNode(node)) return;
+
+				const text = node.getTextContent();
+				const before = text.slice(0, anchor.offset);
+				const lastSlash = before.lastIndexOf('/');
+				if (lastSlash === -1) return;
+
+				// Only trigger when '/' is at the start of the text or after a space
+				const charBefore = lastSlash > 0 ? before[lastSlash - 1] : '';
+				if (charBefore !== '' && charBefore !== ' ') return;
+
+				const query = before.slice(lastSlash + 1);
+				// A space after the slash means the command was abandoned
+				if (query.includes(' ')) return;
+
+				showSlash = true;
+				newQuery = query;
+				newNodeKey = node.getKey();
+				newOffset = lastSlash;
+			});
+
+			// DOM reads happen outside editorState.read()
+			if (showPlus && plusNodeKey) {
+				const domNode = ed.getElementByKey(plusNodeKey);
+				if (domNode) {
+					const rect = domNode.getBoundingClientRect();
+					plusPos = { x: rect.left, y: rect.top + rect.height / 2 };
+					plusVisible = true;
+				}
+			} else {
+				plusVisible = false;
+			}
+
+			if (showSlash) {
+				slashQuery = newQuery;
+				slashNodeKey = newNodeKey;
+				slashStartOffset = newOffset;
+				if (!slashVisible) {
+					const pos = getCaretViewportPos();
+					if (pos) {
+						slashPos = pos;
+						slashVisible = true;
+					}
+				}
+			} else {
+				closeSlash();
+			}
+		});
+	}
+
+	/**
+	 * Execute a block command, optionally first stripping the slash trigger text.
+	 */
+	function executeBlockCommand(id: string) {
+		if (!editor) return;
+		closeSlash();
+
+		const nodeKey = slashNodeKey;
+		const offset = slashStartOffset;
+		const queryLen = slashQuery.length;
+
+		// If triggered via slash, delete the "/query" text first
+		if (nodeKey) {
+			editor.update(
+				() => {
+					const node = getNodeByKey(nodeKey);
+					if (!isTextNode(node)) return;
+					const text = node.getTextContent();
+					node.setTextContent(text.slice(0, offset) + text.slice(offset + 1 + queryLen));
+					node.select(offset, offset);
+				},
+				{
+					onUpdate: () => dispatchBlockCommand(id)
+				}
+			);
+		} else {
+			dispatchBlockCommand(id);
+		}
+	}
+
+	function dispatchBlockCommand(id: string) {
+		if (!editor) return;
+		if (id === 'table') {
+			insertTableAtSize(editor, 3, 3);
+		} else {
+			applyFormat(editor, id as FormatType);
+		}
+		editor.focus();
+	}
+
+	// ───────────────────────────────────────────────────────────────────────
 
 	function cancelPendingChange() {
 		if (onChangeDebounceTimer) {
@@ -102,9 +274,12 @@
 			}, 100);
 		});
 
+		const unregisterDetection = registerInteractiveDetection(editor);
+
 		const prevDispose = editorDispose;
 		editorDispose = () => {
 			try { unregister(); } catch { /* noop */ }
+			try { unregisterDetection(); } catch { /* noop */ }
 			prevDispose?.();
 		};
 	});
@@ -168,6 +343,24 @@
 		onFormat={handleFormat}
 	/>
 </div>
+
+<!-- Slash command palette -->
+<SlashCommandMenu
+	visible={slashVisible}
+	position={slashPos}
+	query={slashQuery}
+	commands={BLOCK_COMMANDS}
+	onSelect={executeBlockCommand}
+	onClose={closeSlash}
+/>
+
+<!-- Plus block button (appears on empty lines) -->
+<PlusBlockMenu
+	visible={plusVisible}
+	position={plusPos}
+	commands={BLOCK_COMMANDS}
+	onSelect={(id) => { slashNodeKey = null; dispatchBlockCommand(id); }}
+/>
 
 <style>
 	.body-editor {

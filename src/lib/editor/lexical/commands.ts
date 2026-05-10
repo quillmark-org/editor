@@ -15,6 +15,8 @@ import {
 import { $findMatchingParent } from '@lexical/utils';
 import { TOGGLE_LINK_COMMAND } from '@lexical/link';
 import { INSERT_TABLE_COMMAND } from '@lexical/table';
+import { $setBlocksType } from '@lexical/selection';
+import { $createHeadingNode, $createQuoteNode } from '@lexical/rich-text';
 
 export type FormatType =
 	| 'bold'
@@ -25,7 +27,10 @@ export type FormatType =
 	| 'link'
 	| 'bulletList'
 	| 'numberedList'
-	| 'insertTable';
+	| 'insertTable'
+	| 'heading1'
+	| 'heading2'
+	| 'quote';
 
 export function applyFormat(editor: LexicalEditor, type: FormatType): void {
 	switch (type) {
@@ -63,6 +68,24 @@ export function applyFormat(editor: LexicalEditor, type: FormatType): void {
 				rows: '3',
 				columns: '3',
 				includeHeaders: true
+			});
+			return;
+		case 'heading1':
+			editor.update(() => {
+				const sel = $getSelection();
+				if ($isRangeSelection(sel)) $setBlocksType(sel, () => $createHeadingNode('h1'));
+			});
+			return;
+		case 'heading2':
+			editor.update(() => {
+				const sel = $getSelection();
+				if ($isRangeSelection(sel)) $setBlocksType(sel, () => $createHeadingNode('h2'));
+			});
+			return;
+		case 'quote':
+			editor.update(() => {
+				const sel = $getSelection();
+				if ($isRangeSelection(sel)) $setBlocksType(sel, () => $createQuoteNode());
 			});
 			return;
 	}
