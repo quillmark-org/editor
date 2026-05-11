@@ -37,7 +37,7 @@
     "**/*.css"
   ],
   "peerDependencies": {
-    "@quillmark/wasm": "^0.75.0",
+    "@quillmark/wasm": "^0.76.0",
     "svelte": "^5"
   },
   "dependencies": {
@@ -63,7 +63,7 @@
   "devDependencies": {
     "@airmark/quiver": "^0.15.0",
     "@quillmark/quiver": "^0.7.0",
-    "@quillmark/wasm": "0.75.0",
+    "@quillmark/wasm": "0.76.0",
     "@sveltejs/adapter-static": "^3.0.6",
     "@sveltejs/kit": "^2.56.1",
     "@sveltejs/package": "^2.3.7",
