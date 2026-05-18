@@ -1,5 +1,5 @@
 {
-	"name": "tonguetoquill-web",
+	"name": "quillmark-editor",
 	"image": "mcr.microsoft.com/devcontainers/javascript-node:24-bookworm",
 	"features": {
 		"ghcr.io/devcontainers/features/common-utils:2": {

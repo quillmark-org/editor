@@ -156,7 +156,7 @@ The honest answer to the question *"can we get 80% feature parity with large sim
 
 ## Risk notes
 
-- **Tier 1, item 1:** if `{:placeholder:}` is used by any downstream Quillmark template author convention not captured in the spec, the click-to-select feature has a small UX value. Confirmation: ripgrep for `{:` across `references/tonguetoquill-web/static/templates/` returns zero hits.
+- **Tier 1, item 1:** if `{:placeholder:}` is used by any downstream Quillmark template author convention not captured in the spec, the click-to-select feature has a small UX value. Confirmation: no template files reference this syntax.
 - **Tier 2:** users who edit a 50-line frontmatter block lose the ability to collapse it. Mitigation: rich mode covers structured frontmatter editing.
 - **Tier 3:** `<textarea>`'s native undo cannot be programmatically invalidated. If we mutate the textarea's `value` from outside (e.g. mode switch), browser undo history resets. The current CodeMirror integration handles this via `dispatch({ changes })`. Acceptable; document the constraint.
 - **Theme parity:** the existing `--qm-*` CSS custom properties are referenced from `quillmark-theme.ts`. After Tier 3, only the textarea background/foreground/cursor color need theming; the rest of the variables can be removed from the public theme.
