@@ -8,7 +8,15 @@
 	 */
 	import { onMount, onDestroy } from 'svelte';
 	import type { LexicalEditor } from 'lexical';
-	import { $getRoot as getRoot } from 'lexical';
+	import {
+		$getRoot as getRoot,
+		$getSelection,
+		$isRangeSelection,
+		$isParagraphNode,
+		KEY_TAB_COMMAND,
+		COMMAND_PRIORITY_LOW
+	} from 'lexical';
+	import { INSERT_UNORDERED_LIST_COMMAND } from '@lexical/list';
 	import SelectionToolbar from './SelectionToolbar.svelte';
 
 	import {
@@ -100,9 +108,44 @@
 			}, 100);
 		});
 
+		// Tab on an empty paragraph → create an unordered list item so the user
+		// gets AFH 33-337 subparagraph syntax without typing "- " manually.
+		// Tab on a list item (INDENT_CONTENT_COMMAND) and Shift-Tab (OUTDENT)
+		// are already handled by Lexical's built-in rich-text and list plugins.
+		const unregisterTab = editor.registerCommand(
+			KEY_TAB_COMMAND,
+			(event: KeyboardEvent) => {
+				if (event.shiftKey) return false;
+
+				// Command handlers run inside Lexical's update context, so $-functions
+				// are available directly without editor.read().
+				const selection = $getSelection();
+				if (!$isRangeSelection(selection) || !selection.isCollapsed()) return false;
+
+				const anchorNode = selection.anchor.getNode();
+				const parent = anchorNode.getParent();
+				const paragraphNode = $isParagraphNode(anchorNode)
+					? anchorNode
+					: parent !== null && $isParagraphNode(parent)
+						? parent
+						: null;
+
+				if (!paragraphNode) return false;
+				if (paragraphNode.getTextContent().trim() !== '' || selection.anchor.offset !== 0) {
+					return false;
+				}
+
+				event.preventDefault();
+				editor!.dispatchCommand(INSERT_UNORDERED_LIST_COMMAND, undefined);
+				return true;
+			},
+			COMMAND_PRIORITY_LOW
+		);
+
 		const prevDispose = editorDispose;
 		editorDispose = () => {
 			try { unregister(); } catch { /* noop */ }
+			try { unregisterTab(); } catch { /* noop */ }
 			prevDispose?.();
 		};
 	});

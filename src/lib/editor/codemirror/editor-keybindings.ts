@@ -135,8 +135,15 @@ function createListContinuationKeymap(): KeyBinding {
 }
 
 /**
- * Creates keybindings for Tab indentation (2 spaces).
- * Handles both single cursor and multi-line selections.
+ * Creates keybindings for Tab indentation.
+ *
+ * Special cases at column 0 (single collapsed cursor):
+ *   - Empty / whitespace-only line  → insert "- " (AFH 33-337 subparagraph marker)
+ *   - Line that begins with a list marker ([-*+] ) → promote one level (prepend 2 spaces)
+ *
+ * All other cases (mid-line cursor, multi-line selection) fall through to the
+ * standard 2-space indent so the cursor position after the edit matches the
+ * user's expectation.
  */
 function createTabIndentKeymap(): KeyBinding {
 	return {
@@ -145,16 +152,38 @@ function createTabIndentKeymap(): KeyBinding {
 			const state = view.state;
 			const selection = state.selection.main;
 			const startLine = state.doc.lineAt(selection.from);
-			const endLine = state.doc.lineAt(selection.to);
 
-			// Build changes for all lines in selection
+			// Single collapsed cursor at the very start of a line
+			if (selection.empty && selection.from === startLine.from) {
+				const lineText = startLine.text;
+
+				// Line already has a list marker: promote one nesting level
+				if (/^\s*([-*+]) /.test(lineText)) {
+					view.dispatch({
+						changes: { from: startLine.from, insert: '  ' },
+						selection: { anchor: selection.from + 2 }
+					});
+					return true;
+				}
+
+				// Empty / whitespace-only line: start a list item
+				if (lineText.trim() === '') {
+					view.dispatch({
+						changes: { from: startLine.from, to: startLine.to, insert: '- ' },
+						selection: { anchor: startLine.from + 2 }
+					});
+					return true;
+				}
+			}
+
+			// Default: indent every line in the selection by 2 spaces
+			const endLine = state.doc.lineAt(selection.to);
 			const changes: { from: number; insert: string }[] = [];
 			for (let i = startLine.number; i <= endLine.number; i++) {
 				const line = state.doc.line(i);
 				changes.push({ from: line.from, insert: '  ' });
 			}
 
-			// Calculate new selection bounds
 			const linesCount = endLine.number - startLine.number + 1;
 			view.dispatch({
 				changes,
@@ -169,8 +198,13 @@ function createTabIndentKeymap(): KeyBinding {
 }
 
 /**
- * Creates keybindings for Shift-Tab unindentation (remove up to 2 spaces).
- * Handles both single cursor and multi-line selections.
+ * Creates keybindings for Shift-Tab unindentation.
+ *
+ * For list marker lines:
+ *   - Top-level "- foo" (no leading spaces) → remove the marker prefix entirely
+ *   - Indented "  - foo" / "    - foo" → remove 2 leading spaces (dedent one level)
+ *
+ * All other lines: remove up to 2 leading spaces (standard dedent).
  */
 function createShiftTabUnindentKeymap(): KeyBinding {
 	return {
@@ -181,7 +215,6 @@ function createShiftTabUnindentKeymap(): KeyBinding {
 			const startLine = state.doc.lineAt(selection.from);
 			const endLine = state.doc.lineAt(selection.to);
 
-			// Build changes for all lines in selection
 			const changes: { from: number; to: number; insert: string }[] = [];
 			let totalRemoved = 0;
 			let firstLineRemoved = 0;
@@ -189,13 +222,23 @@ function createShiftTabUnindentKeymap(): KeyBinding {
 			for (let i = startLine.number; i <= endLine.number; i++) {
 				const line = state.doc.line(i);
 				const lineText = line.text;
+
+				// Top-level list item (no leading spaces before marker): remove the marker
+				const topLevelMatch = lineText.match(/^([-*+] )/);
+				if (topLevelMatch) {
+					const removeCount = topLevelMatch[1].length;
+					changes.push({ from: line.from, to: line.from + removeCount, insert: '' });
+					totalRemoved += removeCount;
+					if (i === startLine.number) firstLineRemoved = removeCount;
+					continue;
+				}
+
+				// Remove up to 2 leading spaces (covers indented list items and plain indentation)
 				const spacesToRemove = lineText.startsWith('  ') ? 2 : lineText.startsWith(' ') ? 1 : 0;
 				if (spacesToRemove > 0) {
 					changes.push({ from: line.from, to: line.from + spacesToRemove, insert: '' });
 					totalRemoved += spacesToRemove;
-					if (i === startLine.number) {
-						firstLineRemoved = spacesToRemove;
-					}
+					if (i === startLine.number) firstLineRemoved = spacesToRemove;
 				}
 			}
 
