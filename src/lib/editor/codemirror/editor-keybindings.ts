@@ -4,6 +4,7 @@
  */
 import { keymap, type KeyBinding } from '@codemirror/view';
 import type { Extension } from '@codemirror/state';
+import { findMetadataBlocks } from './quillmark-patterns';
 
 /**
  * Options for creating the complete editor keymap
@@ -134,6 +135,11 @@ function createListContinuationKeymap(): KeyBinding {
 	};
 }
 
+/** Returns true if the given document offset falls inside a QuillMark metadata block. */
+function isInsideMetadataBlock(doc: import('@codemirror/state').Text, offset: number): boolean {
+	return findMetadataBlocks(doc).some((b) => offset >= b.from && offset <= b.to);
+}
+
 /**
  * Creates keybindings for Tab indentation.
  *
@@ -153,8 +159,12 @@ function createTabIndentKeymap(): KeyBinding {
 			const selection = state.selection.main;
 			const startLine = state.doc.lineAt(selection.from);
 
-			// Single collapsed cursor at the very start of a line
-			if (selection.empty && selection.from === startLine.from) {
+			// Single collapsed cursor at the very start of a line, outside frontmatter
+			if (
+				selection.empty &&
+				selection.from === startLine.from &&
+				!isInsideMetadataBlock(state.doc, selection.from)
+			) {
 				const lineText = startLine.text;
 
 				// Line already has a list marker: promote one nesting level

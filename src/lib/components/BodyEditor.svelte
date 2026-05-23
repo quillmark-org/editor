@@ -120,7 +120,9 @@
 				// Command handlers run inside Lexical's update context, so $-functions
 				// are available directly without editor.read().
 				const selection = $getSelection();
-				if (!$isRangeSelection(selection) || !selection.isCollapsed()) return false;
+				if (!$isRangeSelection(selection)) return false;
+				const { anchor, focus } = selection;
+				if (anchor.key !== focus.key || anchor.offset !== focus.offset) return false;
 
 				const anchorNode = selection.anchor.getNode();
 				const parent = anchorNode.getParent();
