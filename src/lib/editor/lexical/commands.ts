@@ -68,6 +68,18 @@ export function applyFormat(editor: LexicalEditor, type: FormatType): void {
 	}
 }
 
+export function insertTableWithSize(
+	editor: LexicalEditor,
+	rows: number,
+	cols: number
+): void {
+	editor.dispatchCommand(INSERT_TABLE_COMMAND, {
+		rows: String(rows),
+		columns: String(cols),
+		includeHeaders: true
+	});
+}
+
 /**
  * Toggle a list type at the current selection. If the selection is already in
  * a list of the requested type, the list is removed; otherwise it is created

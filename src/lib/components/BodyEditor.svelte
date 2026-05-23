@@ -16,6 +16,7 @@
 		parseMarkdownInto,
 		$serializeToMarkdown as serializeToMarkdown,
 		applyFormat,
+		insertTableWithSize,
 		type FormatType
 	} from '$lib/editor/lexical';
 
@@ -131,6 +132,12 @@
 	export function handleFormat(type: string) {
 		if (!editor) return;
 		applyFormat(editor, type as FormatType);
+		editor.focus();
+	}
+
+	export function insertTable(rows: number, cols: number) {
+		if (!editor) return;
+		insertTableWithSize(editor, rows, cols);
 		editor.focus();
 	}
 </script>
@@ -287,22 +294,39 @@
 		text-decoration: underline line-through;
 	}
 
-	/* Tables */
+	/* Tables — AFH 33-337 "Tongue and Quill" open-rule format:
+	   full-width rule at top and bottom, rule after header, no vertical rules. */
 	.lexical-container :global(.qm-table) {
 		border-collapse: collapse;
-		width: auto;
-		margin: 1em 0;
+		width: 100%;
+		margin: 1.25em 0;
+		border-top: 2px solid var(--qm-foreground);
+		border-bottom: 2px solid var(--qm-foreground);
 	}
 	.lexical-container :global(.qm-table-cell),
 	.lexical-container :global(.qm-table-cell-header) {
-		border: 1px solid var(--qm-border-hover, var(--qm-border));
-		padding: 0.4em 0.6em;
+		/* No side borders — columns are separated by padding alone */
+		border: none;
+		padding: 0.3em 0.75em;
 		text-align: left;
 		vertical-align: top;
-		min-width: 4em;
+		min-width: 5em;
 	}
+	/* Thin rule between body rows */
+	.lexical-container :global(.qm-table-row + .qm-table-row .qm-table-cell) {
+		border-top: 1px solid var(--qm-border);
+	}
+	/* AFH 33-337: header is bold, closed by a heavier rule */
 	.lexical-container :global(.qm-table-cell-header) {
-		background: var(--qm-secondary);
-		font-weight: 600;
+		font-weight: 700;
+		background: transparent;
+		border-bottom: 1.5px solid var(--qm-foreground);
+	}
+	/* Selected cell highlight (Lexical multi-cell drag selection) */
+	.lexical-container :global(.qm-table-cell.selected),
+	.lexical-container :global(.qm-table-cell-header.selected) {
+		background: color-mix(in srgb, var(--qm-accent) 50%, transparent);
+		outline: 2px solid var(--qm-ring);
+		outline-offset: -2px;
 	}
 </style>

@@ -15,6 +15,7 @@
 	import BodyEditor from './BodyEditor.svelte';
 	import AddCardTrigger from './AddCardTrigger.svelte';
 	import CardTypeSelector from './CardTypeSelector.svelte';
+	import RichTextToolbar from './RichTextToolbar.svelte';
 
 	function formatCardLabel(cardType: string): string {
 		if (!cardType) return 'New Card';
@@ -261,6 +262,15 @@
 	export function handleFormat(type: string) {
 		primaryBodyEditor?.handleFormat(type);
 	}
+
+	function handleInsertTable(rows: number, cols: number) {
+		// Route to whichever body editor is currently active
+		if (activeCardId === 'main' || activeCardId === null) {
+			primaryBodyEditor?.insertTable(rows, cols);
+		} else if (typeof activeCardId === 'number') {
+			cardEditors[activeCardId]?.insertTable(rows, cols);
+		}
+	}
 </script>
 
 <div
@@ -268,6 +278,8 @@
 	role="application"
 	aria-label="Rich text editor"
 >
+	<RichTextToolbar onFormat={handleFormat} onInsertTable={handleInsertTable} />
+
 	{#if editorStore.diagnostics.length > 0 && !bannerDismissed}
 		<div class="flex items-start gap-2 bg-destructive/10 border border-destructive/30 text-destructive text-sm px-4 py-2 shrink-0">
 			<div class="flex-1 min-w-0">
