@@ -12,13 +12,6 @@ import { registerHistory, createEmptyHistoryState } from '@lexical/history';
 import { registerList, ListNode, ListItemNode } from '@lexical/list';
 import { LinkNode } from '@lexical/link';
 import { CodeNode } from '@lexical/code-core';
-import {
-	TableCellNode,
-	TableNode,
-	TableRowNode,
-	registerTablePlugin,
-	registerTableSelectionObserver
-} from '@lexical/table';
 import { registerMarkdownShortcuts } from '@lexical/markdown';
 
 import { QUILLMARK_TRANSFORMERS } from './transformers';
@@ -56,11 +49,7 @@ export function createQuillmarkEditor(options: {
 			// link
 			LinkNode,
 			// code
-			CodeNode,
-			// table
-			TableNode,
-			TableRowNode,
-			TableCellNode
+			CodeNode
 		]
 	});
 
@@ -72,8 +61,6 @@ export function createQuillmarkEditor(options: {
 	// LinkNode is registered via the `nodes` array; the auto-link / click
 	// behaviour from `registerLink` (extension stores API) is intentionally
 	// skipped for the spike. TOGGLE_LINK_COMMAND still works without it.
-	teardown.push(registerTablePlugin(editor));
-	teardown.push(registerTableSelectionObserver(editor));
 	teardown.push(registerMarkdownShortcuts(editor, QUILLMARK_TRANSFORMERS));
 
 	return {

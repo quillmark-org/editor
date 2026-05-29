@@ -32,9 +32,5 @@ export const quillmarkTheme: EditorThemeClasses = {
 		strikethrough: 'qm-text-strikethrough',
 		underlineStrikethrough: 'qm-text-underline-strikethrough',
 		code: 'qm-text-code'
-	},
-	table: 'qm-table',
-	tableRow: 'qm-table-row',
-	tableCell: 'qm-table-cell',
-	tableCellHeader: 'qm-table-cell-header'
+	}
 };
