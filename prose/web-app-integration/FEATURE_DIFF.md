@@ -40,6 +40,14 @@ Only pulled in on explicit decision; none are in scope by default.
 3. **List edge cases** *(VERIFY, LOW)* — pass over list Backspace/Enter + nested-list input rules
    against `@lexical/list`; port a single command only where Lexical visibly diverges.
 4. **Tables** — if wanted, re-add via `@lexical/table` as a deliberate, scoped feature.
+5. **Visual-bug sweep & aesthetic maturity** *(MED)* — the package currently ships hand-rolled
+   `src/lib/ui/` primitives (raw `<button>`, custom `base-select`/`switch`/`collapsible-section`/
+   `inline-editable-title`) styled with ad-hoc `qm-*` classes. Do a focused QA pass on visual
+   defects — e.g. the compact-field grid overflow in #2, spacing/typography inconsistencies,
+   incomplete interaction states (hover / `focus-visible` / active / disabled / loading), dark-mode
+   parity across every component, and keyboard/ARIA gaps in the custom primitives (select popover
+   focus trapping + arrow-key nav, switch roles). This is the near-term polish track that feeds the
+   "themed UI foundation" target below.
 
 ## Feature-complete target
 
@@ -61,3 +69,15 @@ The definition of done — the capability set a built-up editor should reach. (�
 - ✓ **Canvas rendering** via `RenderSession.paint()` — multi-page, responsive repaint
 - ✓ SVG / PDF fallback for non-canvas quills
 - ☐ Native diagnostic surfacing in the error banner (build-back-up #1)
+
+**Look & feel / UI foundation**
+- ☐ **Themed UI primitives** — replace the hand-rolled `src/lib/ui/` components (default HTML
+  `<button>`, custom select/switch/popover) with a headless component library — e.g. **bits-ui**
+  (the base under web-app's `shadcn-svelte`) — for accessible, well-behaved buttons, selects,
+  switches, and popovers. Tradeoff to weigh for an embeddable package: pull bits-ui in as a peer
+  dep vs. bundle it; it's a real dependency/bundle-size decision, not a free win.
+- ☐ **Deliberate color palette** — formalize the ad-hoc `--qm-*` tokens into a documented,
+  contrast-checked light/dark palette with semantic roles, themeable by consumers via CSS-variable
+  overrides (no rebuild).
+- ☐ Mature, consistent interaction + dark-mode states across all components (tracked via
+  build-back-up #5).
