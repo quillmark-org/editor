@@ -19,6 +19,12 @@
 | Preview render | SVG (iframe) + PDF, `quillmarkService` singleton | **Canvas** via `RenderSession.paint()` + SVG/PDF fallback, injected `QuillmarkBindings` |
 | `@quillmark/wasm` | `^0.85.0` | **`0.85.0`** |
 
+**Framework: committed to Svelte 5.** The package is Svelte-native by construction —
+`peerDependencies.svelte: ^5`, the `svelte` export condition, and a `@sveltejs/package` build.
+There is no framework-agnostic abstraction and none is planned; this is a deliberate commitment,
+not an accident of extraction. It's also why **bits-ui** (a Svelte-native headless lib) is the
+UI-foundation choice rather than a React/Web-Components option.
+
 **Guiding principle:** the wasm `Document` is the single source of truth for parsing, schema, and
 serialization. App-layer re-implementations of parsing / schema-shaping / document storage are
 non-goals here.
@@ -40,14 +46,21 @@ Only pulled in on explicit decision; none are in scope by default.
 3. **List edge cases** *(VERIFY, LOW)* — pass over list Backspace/Enter + nested-list input rules
    against `@lexical/list`; port a single command only where Lexical visibly diverges.
 4. **Tables** — if wanted, re-add via `@lexical/table` as a deliberate, scoped feature.
-5. **Visual-bug sweep & aesthetic maturity** *(MED)* — the package currently ships hand-rolled
+5. **UI foundation overhaul on `bits-ui`** *(committed; MED–HIGH)* — replace the hand-rolled
    `src/lib/ui/` primitives (raw `<button>`, custom `base-select`/`switch`/`collapsible-section`/
-   `inline-editable-title`) styled with ad-hoc `qm-*` classes. Do a focused QA pass on visual
-   defects — e.g. the compact-field grid overflow in #2, spacing/typography inconsistencies,
-   incomplete interaction states (hover / `focus-visible` / active / disabled / loading), dark-mode
-   parity across every component, and keyboard/ARIA gaps in the custom primitives (select popover
-   focus trapping + arrow-key nav, switch roles). This is the near-term polish track that feeds the
-   "themed UI foundation" target below.
+   `inline-editable-title`) with **bits-ui** headless components. This is the root-cause fix for the
+   *behavioral* maturity issues — keyboard nav, focus management/trapping, ARIA roles, consistent
+   hover/`focus-visible`/active/disabled states — instead of hand-patching each primitive. Scope:
+   - Adopt bits-ui for button / select / switch / popover / dialog / collapsible behavior.
+   - **Decide the styling layer** (the real cost — bits-ui is headless and ships no visuals): keep
+     plain CSS driven by `--qm-*` tokens, or adopt Tailwind as web-app does via `shadcn-svelte`.
+     quillmark-editor has no Tailwind today, so this is a genuine fork in the road.
+   - Formalize the `--qm-*` color palette (semantic roles, contrast-checked light/dark) on top.
+   - Embeddable-package note: bits-ui as peer dep vs. bundled is a dependency/bundle-size call.
+
+   **Not covered by this** (still separate work): non-primitive layout bugs like the compact-field
+   grid overflow (#2), and CSS on the editor/preview *surfaces* (Lexical / CodeMirror / canvas),
+   which aren't built from `ui/` primitives. bits-ui fixes the primitives, not these.
 
 ## Feature-complete target
 
@@ -71,11 +84,10 @@ The definition of done — the capability set a built-up editor should reach. (�
 - ☐ Native diagnostic surfacing in the error banner (build-back-up #1)
 
 **Look & feel / UI foundation**
-- ☐ **Themed UI primitives** — replace the hand-rolled `src/lib/ui/` components (default HTML
-  `<button>`, custom select/switch/popover) with a headless component library — e.g. **bits-ui**
-  (the base under web-app's `shadcn-svelte`) — for accessible, well-behaved buttons, selects,
-  switches, and popovers. Tradeoff to weigh for an embeddable package: pull bits-ui in as a peer
-  dep vs. bundle it; it's a real dependency/bundle-size decision, not a free win.
+- ☐ **Themed UI primitives on `bits-ui`** — the hand-rolled `src/lib/ui/` components are replaced
+  by **bits-ui** (Svelte-native headless lib; the base under web-app's `shadcn-svelte`) for
+  accessible, well-behaved buttons / selects / switches / popovers. Committed; delivered by
+  build-back-up #5.
 - ☐ **Deliberate color palette** — formalize the ad-hoc `--qm-*` tokens into a documented,
   contrast-checked light/dark palette with semantic roles, themeable by consumers via CSS-variable
   overrides (no rebuild).
