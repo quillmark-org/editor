@@ -103,32 +103,11 @@
 	}
 
 	/**
-	 * Check if a table cell-selection is active. Both the legacy
-	 * prosemirror-tables and the current Lexical table observer mark the
-	 * selected cells with the `.selected` / `.selectedCell` class — this
-	 * helper covers both so cell drag-selection still suppresses the floating
-	 * formatting pill.
-	 */
-	function isCellSelectionActive(): boolean {
-		if (!containerElement) return false;
-		return (
-			containerElement.querySelector('.selectedCell') !== null ||
-			containerElement.querySelector('td.selected,th.selected') !== null
-		);
-	}
-
-	/**
 	 * Show the toolbar at the current selection
 	 */
 	function showToolbar() {
 		// Disable on touch devices (phones/tablets)
 		if (window.matchMedia('(hover: none) and (pointer: coarse)').matches) {
-			hideToolbar();
-			return;
-		}
-
-		// Suppress toolbar when table drag handles create a CellSelection
-		if (isCellSelectionActive()) {
 			hideToolbar();
 			return;
 		}

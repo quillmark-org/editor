@@ -6,6 +6,10 @@
  * surfaces wasm-side mutations to Svelte 5 runes ($derived consumers depend
  * on `version` so they re-read after each setField/insertCard/etc).
  *
+ * Terminology: wasm 0.82 renamed the card discriminator from `tag` to `kind`
+ * and replaced the `frontmatter` map with a flat `payloadItems` list. The
+ * editor surfaces fields as `Record<string, unknown>` via `getCardFields`.
+ *
  * Lifecycle: wasm 0.66 ships with `--weak-refs`, so dropped `Document`
  * handles are reclaimed by `FinalizationRegistry`. We keep `destroy()` as
  * an eager teardown hook for component unmount but no longer need to
@@ -32,6 +36,20 @@ function diagnosticsFromError(err: unknown): Diagnostic[] {
 
 /** Snapshot view of a card for read-only consumers. */
 export type CardView = Card;
+
+/**
+ * Project a card's `payloadItems` list into a flat `{ field: value }` map —
+ * the shape components historically read as `card.frontmatter` (removed in
+ * wasm 0.82). Comment/ext items are dropped; field items keep their value.
+ */
+export function getCardFields(card: Card | null | undefined): Record<string, unknown> {
+	if (!card) return {};
+	const out: Record<string, unknown> = {};
+	for (const item of card.payloadItems) {
+		if (item.type === 'field') out[item.key] = item.value;
+	}
+	return out;
+}
 
 /**
  * Determines whether a value should be treated as "empty" at the YAML write boundary.
@@ -128,10 +146,10 @@ export class EditorStateStore {
 		return this._doc?.quillRef ?? '';
 	}
 
-	/** Document-level (main card) frontmatter. */
+	/** Document-level (main card) fields, projected from `payloadItems`. */
 	get mainFrontmatter(): Record<string, unknown> {
 		void this._version;
-		return (this._doc?.main.frontmatter as Record<string, unknown>) ?? {};
+		return getCardFields(this._doc?.main);
 	}
 
 	/** Document-level body. */
@@ -172,9 +190,11 @@ export class EditorStateStore {
 	}
 
 	/**
-	 * Replace the QUILL reference. QUILL is mandatory and not a regular
-	 * frontmatter field — clearing it is not representable, and `setField`
-	 * throws on the reserved name. Routes through wasm's dedicated primitive.
+	 * Replace the `$quill` reference on the main card. `$quill` is mandatory
+	 * system metadata, not a regular payload field — clearing it is not
+	 * representable, and `setField` is constrained to user field names
+	 * (`[a-z_][a-z0-9_]*`) and rejects the `$`-prefixed metadata sigil.
+	 * Routes through wasm's dedicated primitive.
 	 */
 	setQuillRef(quillRef: string): void {
 		if (!this._doc) return;
@@ -237,20 +257,20 @@ export class EditorStateStore {
 	}
 
 	/**
-	 * Insert a new card at `index` with the given (valid) tag. Returns the
+	 * Insert a new card at `index` with the given (valid) kind. Returns the
 	 * new card index, or -1 if not initialized. Wasm rejects empty/invalid
-	 * tags; callers must supply a real tag (managing any pre-tag UI state
-	 * themselves).
+	 * kinds; callers must supply a real kind (managing any pre-kind UI
+	 * state themselves).
 	 *
-	 * `fields` lets the caller seed initial frontmatter — typically the
-	 * `default` values from `quill.blankCard(tag).values` so a freshly
+	 * `fields` lets the caller seed initial payload values — typically the
+	 * `default` values from `quill.blankCard(kind).values` so a freshly
 	 * inserted card matches Quillmark's authoritative defaults in one
 	 * mutation rather than via a follow-up batch write.
 	 */
-	addCard(index: number, tag: string, fields: Record<string, unknown> = {}): number {
+	addCard(index: number, kind: string, fields: Record<string, unknown> = {}): number {
 		if (!this._doc) return -1;
 		const clamped = Math.max(0, Math.min(index, this._doc.cardCount));
-		this._doc.insertCard(clamped, { tag, fields, body: '' });
+		this._doc.insertCard(clamped, { kind, fields, body: '' });
 		this.bump();
 		return clamped;
 	}
@@ -275,16 +295,16 @@ export class EditorStateStore {
 	}
 
 	/**
-	 * Re-tag a card in place. Frontmatter and body are preserved by the wasm
+	 * Re-kind a card in place. Payload and body are preserved by the wasm
 	 * primitive; schema-aware migration (clearing orphan fields, applying new
 	 * defaults) is the caller's concern.
 	 */
-	setCardTag(index: number, newTag: string): void {
+	setCardKind(index: number, newKind: string): void {
 		if (!this._doc) return;
 		if (index < 0 || index >= this._doc.cardCount) return;
 		const card = this._doc.cards[index];
-		if (!card || card.tag === newTag) return;
-		this._doc.setCardTag(index, newTag);
+		if (!card || card.kind === newKind) return;
+		this._doc.setCardKind(index, newKind);
 		this.bump();
 	}
 

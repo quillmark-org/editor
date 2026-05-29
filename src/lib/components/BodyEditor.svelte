@@ -286,23 +286,4 @@
 	.lexical-container :global(.qm-text-underline-strikethrough) {
 		text-decoration: underline line-through;
 	}
-
-	/* Tables */
-	.lexical-container :global(.qm-table) {
-		border-collapse: collapse;
-		width: auto;
-		margin: 1em 0;
-	}
-	.lexical-container :global(.qm-table-cell),
-	.lexical-container :global(.qm-table-cell-header) {
-		border: 1px solid var(--qm-border-hover, var(--qm-border));
-		padding: 0.4em 0.6em;
-		text-align: left;
-		vertical-align: top;
-		min-width: 4em;
-	}
-	.lexical-container :global(.qm-table-cell-header) {
-		background: var(--qm-secondary);
-		font-weight: 600;
-	}
 </style>

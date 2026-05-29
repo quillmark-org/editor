@@ -14,7 +14,6 @@ import {
 } from '@lexical/list';
 import { $findMatchingParent } from '@lexical/utils';
 import { TOGGLE_LINK_COMMAND } from '@lexical/link';
-import { INSERT_TABLE_COMMAND } from '@lexical/table';
 
 export type FormatType =
 	| 'bold'
@@ -24,8 +23,7 @@ export type FormatType =
 	| 'code'
 	| 'link'
 	| 'bulletList'
-	| 'numberedList'
-	| 'insertTable';
+	| 'numberedList';
 
 export function applyFormat(editor: LexicalEditor, type: FormatType): void {
 	switch (type) {
@@ -57,13 +55,6 @@ export function applyFormat(editor: LexicalEditor, type: FormatType): void {
 			return;
 		case 'numberedList':
 			toggleListCommand(editor, 'number');
-			return;
-		case 'insertTable':
-			editor.dispatchCommand(INSERT_TABLE_COMMAND, {
-				rows: '3',
-				columns: '3',
-				includeHeaders: true
-			});
 			return;
 	}
 }

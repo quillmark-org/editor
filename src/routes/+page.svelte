@@ -4,8 +4,9 @@
 	import type { QuillmarkBindings } from '$lib/types.js';
 	import { createBindings } from './bindings.svelte.js';
 
-	const SAMPLE = `---
-QUILL: usaf_memo@0.2.0
+	const SAMPLE = `~~~card-yaml
+$quill: usaf_memo@0.2.0
+$kind: main
 letterhead_title: DEPARTMENT OF THE AIR FORCE
 letterhead_caption:
   - HEADQUARTERS YOUR UNIT NAME
@@ -21,7 +22,7 @@ subject: Subject of the Memorandum
 signature_block:
   - FIRST M. LAST, Rank, USAF
   - Duty Title
----
+~~~
 
 The \`usaf_memo\` Quill package takes care of all 33-337 formatting details. Focus on the content.
 

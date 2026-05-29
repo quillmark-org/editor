@@ -8,6 +8,7 @@
 	import { isReservedFieldKey, schemaHasRenderableFormFields } from '$lib/utils/schema-utils';
 	import CardTypeSelector from './CardTypeSelector.svelte';
 	import { onMount } from 'svelte';
+	import { getCardFields } from '$lib/editor/editorState.svelte';
 	import type { EditorStateStore, EditorTarget } from '$lib/editor/editorState.svelte';
 	import { getQuillmarkContext } from '$lib/context.js';
 	import type { FormSchema } from '$lib/types.js';
@@ -47,12 +48,12 @@
 		store
 	}: Props = $props();
 
-	/** Live frontmatter values for showWhen conditions. */
+	/** Live field values for showWhen conditions. */
 	const parsedMetadata = $derived.by<Record<string, unknown>>(() => {
 		if (target.kind === 'main') {
 			return store.mainFrontmatter;
 		}
-		return (store.getCard(target.index)?.frontmatter as Record<string, unknown>) ?? {};
+		return getCardFields(store.getCard(target.index));
 	});
 
 	const schemaHasMetadataFields = $derived(
@@ -66,25 +67,24 @@
 
 	const currentCardType = $derived.by<string | null>(() => {
 		if (target.kind !== 'card') return null;
-		return store.getCard(target.index)?.tag ?? null;
+		return store.getCard(target.index)?.kind ?? null;
 	});
 
 	/**
-	 * Re-tag a card (used by the "Invalid Card Type" repair UI when a doc
-	 * loads with a tag the current quill no longer defines). Sets the new
-	 * tag structurally and merges in any schema defaults missing from the
-	 * existing frontmatter, so the user lands in an editable state.
+	 * Re-kind a card (used by the "Invalid Card Type" repair UI when a doc
+	 * loads with a kind the current quill no longer defines). Sets the new
+	 * kind structurally and merges in any schema defaults missing from the
+	 * existing payload, so the user lands in an editable state.
 	 */
 	function handleCardTypeRepair(newType: string) {
 		if (target.kind !== 'card' || !quillRef) return;
 
-		store.setCardTag(target.index, newType);
+		store.setCardKind(target.index, newType);
 
 		try {
-			const cardSchema = bindings.getQuill(quillRef).schema.card_types?.[newType];
+			const cardSchema = bindings.getQuill(quillRef).schema.card_kinds?.[newType];
 			if (cardSchema?.fields) {
-				const existingData =
-					(store.getCard(target.index)?.frontmatter as Record<string, unknown>) ?? {};
+				const existingData = getCardFields(store.getCard(target.index));
 				const defaults: Record<string, unknown> = {};
 				for (const [name, field] of Object.entries(cardSchema.fields)) {
 					if (isReservedFieldKey(name)) continue;
@@ -147,8 +147,8 @@
 		{#if context === 'card'}
 			{@const currentType = currentCardType}
 			{#if currentType && cardTypes.length > 0 && !cardTypes.includes(currentType)}
-				<!-- Invalid Card Type (Repair Mode) — loaded a doc whose card tag
-				     isn't in this quill's card_types. -->
+				<!-- Invalid Card Type (Repair Mode) — loaded a doc whose card kind
+				     isn't in this quill's card_kinds. -->
 				<div class="flex flex-col gap-2 px-4 py-3 bg-destructive/10">
 					<div class="text-sm font-medium text-destructive">
 						Invalid card type: <span class="font-mono">{currentType}</span>
@@ -165,7 +165,7 @@
 					</div>
 				</div>
 			{:else}
-				<!-- Valid tag but no schema for it (malformed or missing card_types entry). -->
+				<!-- Valid kind but no schema for it (malformed or missing card_kinds entry). -->
 				<div class="px-4 py-3 text-sm text-muted-foreground">
 					No schema available for {title || currentType}.
 				</div>

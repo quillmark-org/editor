@@ -3,7 +3,7 @@
 	import { flip } from 'svelte/animate';
 	import { X } from 'lucide-svelte';
 
-	import { EditorStateStore, type CardView } from '$lib/editor/editorState.svelte';
+	import { EditorStateStore, getCardFields, type CardView } from '$lib/editor/editorState.svelte';
 	import { getQuillmarkContext } from '$lib/context.js';
 	import type { FormSchema } from '$lib/types.js';
 
@@ -26,16 +26,16 @@
 	}
 
 	function getCardName(card: CardView): string {
-		const presentation = card.frontmatter?.PRESENTATION as Record<string, unknown> | undefined;
+		const presentation = getCardFields(card).PRESENTATION as Record<string, unknown> | undefined;
 		if (presentation?.name && typeof presentation.name === 'string') {
 			return presentation.name;
 		}
-		return formatCardLabel(card.tag);
+		return formatCardLabel(card.kind);
 	}
 
 	function handleCardNameChange(index: number, newName: string) {
 		const card = editorStore.getCard(index);
-		const presentation = (card?.frontmatter?.PRESENTATION as Record<string, unknown>) ?? {};
+		const presentation = (getCardFields(card).PRESENTATION as Record<string, unknown>) ?? {};
 		editorStore.setCardField(index, 'PRESENTATION', { ...presentation, name: newName });
 		emitDocumentChange();
 	}
@@ -146,7 +146,7 @@
 	 */
 	const quillSchema = $derived.by<{
 		main?: FormSchema;
-		card_types?: Record<string, FormSchema>;
+		card_kinds?: Record<string, FormSchema>;
 	} | null>(() => {
 		if (!quillRef) return null;
 		try {
@@ -157,15 +157,15 @@
 	});
 
 	const mainSchema = $derived<FormSchema | null>(quillSchema?.main ?? null);
-	function cardSchemaForTag(tag: string): FormSchema | null {
-		return quillSchema?.card_types?.[tag] ?? null;
+	function cardSchemaForKind(kind: string): FormSchema | null {
+		return quillSchema?.card_kinds?.[kind] ?? null;
 	}
 
 	const mainHideBody = $derived(
 		(mainSchema?.body as { enabled?: boolean } | undefined)?.enabled === false
 	);
-	function cardHideBody(tag: string): boolean {
-		const body = cardSchemaForTag(tag)?.body as { enabled?: boolean } | undefined;
+	function cardHideBody(kind: string): boolean {
+		const body = cardSchemaForKind(kind)?.body as { enabled?: boolean } | undefined;
 		return body?.enabled === false;
 	}
 
@@ -180,8 +180,8 @@
 	}
 
 	function handleAddCard(insertAt: number) {
-		// With a single allowed tag, skip the picker and insert directly.
-		// Otherwise open a UI-only placeholder so the user can pick a tag
+		// With a single allowed kind, skip the picker and insert directly.
+		// Otherwise open a UI-only placeholder so the user can pick a kind
 		// before we commit the card to the wasm Document.
 		if (cardTypes.length === 0) return;
 		if (cardTypes.length === 1) {
@@ -191,8 +191,8 @@
 		placeholderInsertAt = insertAt;
 	}
 
-	function promoteToCard(insertAt: number, tag: string) {
-		const newIndex = editorStore.addCard(insertAt, tag, getBlankCardDefaults(tag));
+	function promoteToCard(insertAt: number, kind: string) {
+		const newIndex = editorStore.addCard(insertAt, kind, getBlankCardDefaults(kind));
 		if (newIndex < 0) return;
 		placeholderInsertAt = null;
 		setActiveCardId(newIndex);
@@ -201,16 +201,16 @@
 	}
 
 	/**
-	 * Default frontmatter for a freshly inserted card, sourced from
-	 * `quill.blankCard(tag).values` (wasm 0.64+). Each entry is `{ value,
-	 * default, source }`; we take `default` whenever `source === 'default'`
-	 * and skip `'missing'` fields so the card's frontmatter stays minimal.
+	 * Default payload values for a freshly inserted card, sourced from
+	 * `quill.blankCard(kind).values`. Each entry is `{ value, default,
+	 * source }`; we take `default` whenever `source === 'default'` and skip
+	 * `'missing'` fields so the card's payload stays minimal.
 	 */
-	function getBlankCardDefaults(tag: string): Record<string, unknown> {
+	function getBlankCardDefaults(kind: string): Record<string, unknown> {
 		if (!quillRef) return {};
 		try {
 			const quill = bindings.getQuill(quillRef);
-			const blank = quill.blankCard(tag) as {
+			const blank = quill.blankCard(kind) as {
 				values?: Record<string, { source: string; default: unknown }>;
 			} | null;
 			if (!blank?.values) return {};
@@ -339,7 +339,7 @@
 							onclick={() => setActiveCardId(index)}
 						>
 							<MetadataWidget
-								schema={cardSchemaForTag(card.tag)}
+								schema={cardSchemaForKind(card.kind)}
 								{quillRef}
 								{cardTypes}
 								context="card"
@@ -349,7 +349,7 @@
 							/>
 
 							<div class="border-t border-border/30">
-								{#if !cardHideBody(card.tag)}
+								{#if !cardHideBody(card.kind)}
 									<BodyEditor
 										bind:this={cardEditors[index]}
 										content={card.body}
@@ -388,7 +388,7 @@
 					<CardTypeSelector
 						value={null}
 						items={[...cardTypes]}
-						onSelect={(tag) => promoteToCard(placeholderInsertAt!, tag)}
+						onSelect={(kind) => promoteToCard(placeholderInsertAt!, kind)}
 						autoFocus={true}
 					/>
 				</div>

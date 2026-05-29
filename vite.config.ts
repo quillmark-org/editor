@@ -34,12 +34,8 @@ export default defineConfig({
 	test: {
 		environment: 'node',
 		include: ['src/**/*.{test,spec}.{js,ts}'],
-		// Tests that depend on DOM/CodeMirror are excluded by default; consumers
+		// DOM-dependent Svelte component tests are excluded by default; consumers
 		// re-enable them via a per-test `// @vitest-environment jsdom` pragma.
-		exclude: [
-			'src/**/*.svelte.{test,spec}.{js,ts}',
-			'src/lib/editor/codemirror/**/*.test.ts',
-			'references/**'
-		]
+		exclude: ['src/**/*.svelte.{test,spec}.{js,ts}', 'references/**']
 	}
 });

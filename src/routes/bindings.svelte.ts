@@ -82,7 +82,7 @@ class PlaygroundBindings implements QuillmarkBindings {
 						version,
 						description: schema.main.description,
 						supportedFormats,
-						cardTypes: Object.freeze(Object.keys(schema.card_types ?? {}))
+						cardTypes: Object.freeze(Object.keys(schema.card_kinds ?? {}))
 					};
 					this.resolved.set(canonical, { quill, info });
 				}

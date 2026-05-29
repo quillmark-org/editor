@@ -2,13 +2,14 @@
 	import SchemaForm from './SchemaForm.svelte';
 	import { getSchemaDefaults } from '$lib/utils/card-schema-utils';
 	import { isReservedFieldKey } from '$lib/utils/schema-utils';
+	import { getCardFields } from '$lib/editor/editorState.svelte';
 	import type { FormSchema } from '$lib/types.js';
 	import type { EditorStateStore, EditorTarget } from '$lib/editor/editorState.svelte';
 
 	/**
-	 * WizardCore renders the form for a frontmatter or card target. The
+	 * WizardCore renders the form for a main-card or card target. The
 	 * `EditorStateStore` is the single source of truth — `formData` mirrors
-	 * the live frontmatter for `target`, dirty fields write back via the
+	 * the live field values for `target`, dirty fields write back via the
 	 * store's setMainField / setCardField mutations.
 	 */
 
@@ -39,12 +40,12 @@
 	let formData = $state<Record<string, unknown>>({});
 	let dirtyFields = $state(new Set<string>());
 
-	// Reactive frontmatter snapshot pulled from the store.
+	// Reactive field-values snapshot pulled from the store.
 	const sourceData = $derived.by<Record<string, unknown>>(() => {
 		if (target.kind === 'main') {
 			return store.mainFrontmatter;
 		}
-		return (store.getCard(target.index)?.frontmatter as Record<string, unknown>) ?? {};
+		return getCardFields(store.getCard(target.index));
 	});
 
 	// Track the data signature we last initialised from so we don't clobber
