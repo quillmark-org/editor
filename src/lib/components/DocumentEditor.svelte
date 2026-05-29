@@ -70,12 +70,21 @@
 
 	let resolvedQuillRef = $state<string | null>(null);
 
+	// Derive the quill ref straight from the wasm parser — the single source
+	// of truth — rather than regex-matching frontmatter. (wasm 0.85 moved the
+	// ref into the root `~~~card-yaml` block's `$quill` key; a `---`/`QUILL:`
+	// regex no longer matches.)
 	const parsedQuillName = $derived.by<string | null>(() => {
 		if (!debouncedContent || !ctx.isReady) return null;
-		const fmMatch = debouncedContent.match(/^---[ \t]*\r?\n([\s\S]*?)^---[ \t]*$/m);
-		if (!fmMatch) return null;
-		const quillMatch = fmMatch[1].match(/^QUILL:[ \t]*(\S+)/m);
-		return quillMatch ? quillMatch[1] : null;
+		let doc: import('@quillmark/wasm').Document | null = null;
+		try {
+			doc = ctx.parseDocument(debouncedContent);
+			return doc.quillRef || null;
+		} catch {
+			return null;
+		} finally {
+			doc?.free();
+		}
 	});
 
 	$effect(() => {
