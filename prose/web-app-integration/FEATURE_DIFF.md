@@ -23,18 +23,6 @@
 serialization. App-layer re-implementations of parsing / schema-shaping / document storage are
 non-goals here.
 
-## Hard non-goals
-
-Do not add without an explicit decision:
-
-- **Tables** (no `@lexical/table`; no drag-handle `TableControls` UX)
-- **Tools / overlays** — ruler, measurement
-- **Thumbnail rendering** (host-app concern)
-- **Inline-metadata nodes** (obsolete under 0.85, which separates `~~~card-yaml` from body)
-- **Placeholder UX** (`{: … :}`)
-- **HTML-comment stripping**, raw-source `Mod-B`/`Mod-I` shortcuts
-- **`quillmarkService` singleton** — the injected-`QuillmarkBindings` model stays
-
 ## Build-back-up candidates
 
 Only pulled in on explicit decision; none are in scope by default.
@@ -52,3 +40,24 @@ Only pulled in on explicit decision; none are in scope by default.
 3. **List edge cases** *(VERIFY, LOW)* — pass over list Backspace/Enter + nested-list input rules
    against `@lexical/list`; port a single command only where Lexical visibly diverges.
 4. **Tables** — if wanted, re-add via `@lexical/table` as a deliberate, scoped feature.
+
+## Feature-complete target
+
+The definition of done — the capability set a built-up editor should reach. (✓ = present today,
+☐ = to build.) Anything not listed here is simply not in the target.
+
+**Visual editor (Lexical)**
+- ✓ Rich text: bold, italic, underline, strikethrough, inline code, links
+- ✓ Headings, blockquote, code blocks
+- ✓ Bullet / ordered lists with nesting
+- ✓ Cards: add / reorder / delete + schema-driven metadata forms
+- ☐ **Tables** — insert/edit with clean markdown round-trip (via `@lexical/table`)
+- ☐ Polished compact-field form layout (build-back-up #2)
+
+**Markdown editor (CodeMirror)**
+- ✓ Standard markdown + YAML / `card-yaml` syntax highlighting
+
+**Preview**
+- ✓ **Canvas rendering** via `RenderSession.paint()` — multi-page, responsive repaint
+- ✓ SVG / PDF fallback for non-canvas quills
+- ☐ Native diagnostic surfacing in the error banner (build-back-up #1)
