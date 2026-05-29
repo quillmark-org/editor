@@ -2,7 +2,12 @@
  * Schema-related utilities for consistent handling of schema properties.
  */
 
-/** True for QUILL, CARD, and any other all-caps sentinel keys the wasm engine injects. */
+/**
+ * True for any all-caps key that the form layer hides from the user
+ * (defensive filter — wasm 0.83+ emits schemas containing only user-fillable
+ * lowercase fields, so this is a belt-and-suspenders check for any stray
+ * uppercase fixture data the engine never produces in practice).
+ */
 export function isReservedFieldKey(key: string): boolean {
 	return key !== key.toLowerCase();
 }
